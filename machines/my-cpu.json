@@ -1,0 +1,28 @@
+{
+  "cpuName": "scratch -- see the run-my-source target in CMakeLists.txt",
+  "description": {
+    "regCount": 8,
+    "addressBits": 16,
+    "byteOrder": "little"
+  },
+  "fields": {
+    "NOP": {
+      "build": "con",
+      "value": "0b00000000",
+      "bits": 8,
+      "lsb": 0
+    }
+  },
+  "instructions": {
+    "NOP": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "NOP"
+          ]
+        }
+      }
+    }
+  }
+}

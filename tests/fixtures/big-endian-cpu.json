@@ -1,0 +1,80 @@
+{
+  "cpuName": "BE",
+  "maxOperands": 1,
+  "description": {
+    "regCount": 8,
+    "addressBits": 32,
+    "byteOrder": "big",
+    "relOffset": "after"
+  },
+  "fields": {
+    "op_movel": {
+      "build": "con",
+      "value": "0x203c",
+      "bits": 16,
+      "lsb": 32
+    },
+    "imm32": {
+      "build": "imm",
+      "bits": 32,
+      "lsb": 0
+    },
+    "op_bras": {
+      "build": "con",
+      "value": "0x60",
+      "bits": 8,
+      "lsb": 8
+    },
+    "disp8": {
+      "build": "pcrel",
+      "bits": 8,
+      "lsb": 0
+    },
+    "op_nop": {
+      "build": "con",
+      "value": "0x4e71",
+      "bits": 16,
+      "lsb": 0
+    }
+  },
+  "instructions": {
+    "MOVEL": {
+      "forms": {
+        "imm": {
+          "size": 6,
+          "fields": [
+            "op_movel",
+            "imm32"
+          ],
+          "from": {
+            "imm32": "op1.num1"
+          }
+        }
+      }
+    },
+    "BRAS": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 2,
+          "fields": [
+            "op_bras",
+            "disp8"
+          ],
+          "from": {
+            "disp8": "op1.num1"
+          }
+        }
+      }
+    },
+    "NOP": {
+      "forms": {
+        "": {
+          "size": 2,
+          "fields": [
+            "op_nop"
+          ]
+        }
+      }
+    }
+  }
+}

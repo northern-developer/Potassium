@@ -1,0 +1,14 @@
+CPU: 'TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm) eMachine:0' supporting 62 instruction forms.
+ORG set to: 0 + 
+#ZZZ R0                            -- unsupported mnemonic
+
+# Not Found: ZZZ reg
+#AAB [R0]                          -- supported mnemonic, unsupported mode
+
+# Not Found: AAB [reg]
+ ZZZ R0 1 0 []  [] 0x0 0
+ AAB R0 2 0 []  [] 0x0 0
+ ZZZ R0 1 0 [0, ]  [] 0x0 0
+ AAB R0 2 0 [0, ]  [] 0x0 0
+
+

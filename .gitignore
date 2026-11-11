@@ -1,0 +1,21 @@
+build/
+build-*/
+.cache/
+.cmake/
+CMakeUserPresets.json
+.claude/
+# antlr4's runtime/Cpp CMake copies build output here using
+# CMAKE_SOURCE_DIR (the whole build's root), not its own subdir.
+dist/
+# ctest/CMake occasionally drop these at the repo root (not just inside
+# build/<preset>/) depending on how a preset is invoked.
+Testing/
+compile_commands.json
+# cpp-library writes its CI workflow here on every configure; ptasm has
+# no CI for now.
+.github/
+# cpp-library writes its docs landing page here on every configure; ptasm
+# doesn't publish one.
+docs/index.html
+# The private CPU overlay (a symlink to a folder outside the project).
+/prototype

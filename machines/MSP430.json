@@ -1,0 +1,297 @@
+{
+  "cpuName": "MSP430 (minimal, for ELFCLASS32: MOV, AND/CMP #imm16, PUSH/POP, INC &abs, JNE, CALL #addr16, RET)",
+  "maxOperands": 2,
+  "description": {
+    "regCount": 16,
+    "addressBits": 16,
+    "byteOrder": "little",
+    "relOffset": "after"
+  },
+  "elf": {
+    "eMachine": 105,
+    "elfClass": 32,
+    "relocations": {
+      "addr16": 5
+    }
+  },
+  "fields": {
+    "mov_imm_op": {
+      "build": "con",
+      "value": "0x403",
+      "bits": 12,
+      "lsb": 4
+    },
+    "dst": {
+      "build": "reg",
+      "bits": 4,
+      "lsb": 0
+    },
+    "imm16": {
+      "build": "imm",
+      "bits": 16,
+      "lsb": 16
+    },
+    "addr16": {
+      "build": "addr",
+      "bits": 16,
+      "lsb": 16
+    },
+    "call_op": {
+      "build": "con",
+      "value": "0x12B0",
+      "bits": 16,
+      "lsb": 0
+    },
+    "ret": {
+      "build": "con",
+      "value": "0x4130",
+      "bits": 16,
+      "lsb": 0
+    },
+    "push_op": {
+      "build": "con",
+      "value": "0x120",
+      "bits": 12,
+      "lsb": 4
+    },
+    "pop_op": {
+      "build": "con",
+      "value": "0x413",
+      "bits": 12,
+      "lsb": 4
+    },
+    "mov_rr_op": {
+      "build": "con",
+      "value": "0x4",
+      "bits": 4,
+      "lsb": 12
+    },
+    "rr_src": {
+      "build": "reg",
+      "bits": 4,
+      "lsb": 8
+    },
+    "inc_abs_op": {
+      "build": "con",
+      "value": "0x5392",
+      "bits": 16,
+      "lsb": 0
+    },
+    "and_imm_op": {
+      "build": "con",
+      "value": "0xF03",
+      "bits": 12,
+      "lsb": 4
+    },
+    "cmp_imm_op": {
+      "build": "con",
+      "value": "0x903",
+      "bits": 12,
+      "lsb": 4
+    },
+    "jne_op": {
+      "build": "con",
+      "value": "0b001000",
+      "bits": 6,
+      "lsb": 10
+    },
+    "jne_offset": {
+      "build": "pcrel",
+      "bits": 10,
+      "lsb": 0,
+      "valueLsb": 1,
+      "target": "jump"
+    }
+  },
+  "instructions": {
+    "MOV": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "mov_imm_op",
+            "dst",
+            "imm16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "imm16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 4,
+          "fields": [
+            "mov_imm_op",
+            "dst",
+            "addr16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "addr16": "op2.num1"
+          }
+        },
+        "reg, reg": {
+          "size": 2,
+          "fields": [
+            "mov_rr_op",
+            "rr_src",
+            "dst"
+          ],
+          "unused": [
+            "7-4"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "rr_src": "op2.reg1"
+          }
+        }
+      }
+    },
+    "CALL": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 4,
+          "fields": [
+            "call_op",
+            "addr16"
+          ],
+          "from": {
+            "addr16": "op1.num1"
+          }
+        }
+      }
+    },
+    "RET": {
+      "forms": {
+        "": {
+          "size": 2,
+          "fields": [
+            "ret"
+          ]
+        }
+      }
+    },
+    "PUSH": {
+      "forms": {
+        "reg": {
+          "size": 2,
+          "fields": [
+            "push_op",
+            "dst"
+          ],
+          "from": {
+            "dst": "op1.reg1"
+          }
+        }
+      }
+    },
+    "POP": {
+      "forms": {
+        "reg": {
+          "size": 2,
+          "fields": [
+            "pop_op",
+            "dst"
+          ],
+          "from": {
+            "dst": "op1.reg1"
+          }
+        }
+      }
+    },
+    "INC": {
+      "forms": {
+        "[imm]": {
+          "size": 4,
+          "fields": [
+            "inc_abs_op",
+            "imm16"
+          ],
+          "from": {
+            "imm16": "op1.num1"
+          }
+        },
+        "[local|reloc]": {
+          "size": 4,
+          "fields": [
+            "inc_abs_op",
+            "addr16"
+          ],
+          "from": {
+            "addr16": "op1.num1"
+          }
+        }
+      }
+    },
+    "AND": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "and_imm_op",
+            "dst",
+            "imm16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "imm16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 4,
+          "fields": [
+            "and_imm_op",
+            "dst",
+            "addr16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "addr16": "op2.num1"
+          }
+        }
+      }
+    },
+    "CMP": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "cmp_imm_op",
+            "dst",
+            "imm16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "imm16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 4,
+          "fields": [
+            "cmp_imm_op",
+            "dst",
+            "addr16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "addr16": "op2.num1"
+          }
+        }
+      }
+    },
+    "JNE": {
+      "forms": {
+        "imm|local": {
+          "size": 2,
+          "fields": [
+            "jne_op",
+            "jne_offset"
+          ],
+          "from": {
+            "jne_offset": "op1.num1"
+          }
+        }
+      }
+    }
+  }
+}

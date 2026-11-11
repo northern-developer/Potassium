@@ -1,0 +1,793 @@
+{
+  "cpuName": "OR1K",
+  "maxOperands": 3,
+  "description": {
+    "regCount": 32,
+    "addressBits": 32,
+    "byteOrder": "big",
+    "relOffset": "before"
+  },
+  "elf": {
+    "eMachine": 92,
+    "elfClass": 32,
+    "relocations": {
+      "addr32": 1
+    }
+  },
+  "fields": {
+    "opcode": {
+      "build": "set",
+      "bits": 6,
+      "lsb": 26
+    },
+    "rD": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 21
+    },
+    "rA": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 16
+    },
+    "rB": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 11
+    },
+    "alu_op": {
+      "build": "set",
+      "bits": 10,
+      "lsb": 0
+    },
+    "sf_op": {
+      "build": "set",
+      "bits": 11,
+      "lsb": 21
+    },
+    "shift_op": {
+      "build": "set",
+      "bits": 2,
+      "lsb": 6
+    },
+    "shift_l": {
+      "build": "imm",
+      "bits": 6,
+      "lsb": 0
+    },
+    "imm16": {
+      "build": "addr",
+      "signed": true,
+      "bits": 16,
+      "lsb": 0,
+      "relocation": 4
+    },
+    "k16": {
+      "build": "addr",
+      "bits": 16,
+      "lsb": 0,
+      "relocation": 4
+    },
+    "movhi_k": {
+      "build": "imm",
+      "bits": 16,
+      "lsb": 0
+    },
+    "hi16": {
+      "build": "addr",
+      "bits": 16,
+      "lsb": 0,
+      "valueLsb": 16,
+      "relocation": 5
+    },
+    "ha16": {
+      "build": "addr",
+      "bits": 16,
+      "lsb": 0,
+      "valueLsb": 16,
+      "round": true,
+      "relocation": 35
+    },
+    "movhi_zero": {
+      "build": "con",
+      "value": 0,
+      "bits": 1,
+      "lsb": 16
+    },
+    "store_imm": {
+      "build": "addr",
+      "signed": true,
+      "relocation": 39,
+      "pieces": [
+        {
+          "bits": 11,
+          "lsb": 0,
+          "valueLsb": 0
+        },
+        {
+          "bits": 5,
+          "lsb": 21,
+          "valueLsb": 11
+        }
+      ]
+    },
+    "mtspr_k": {
+      "build": "imm",
+      "pieces": [
+        {
+          "bits": 11,
+          "lsb": 0,
+          "valueLsb": 0
+        },
+        {
+          "bits": 5,
+          "lsb": 21,
+          "valueLsb": 11
+        }
+      ]
+    },
+    "n26": {
+      "build": "pcrel",
+      "target": "jump",
+      "bits": 26,
+      "lsb": 0,
+      "valueLsb": 2,
+      "relocation": 6
+    },
+    "top8": {
+      "build": "set",
+      "bits": 8,
+      "lsb": 24
+    },
+    "top16": {
+      "build": "set",
+      "bits": 16,
+      "lsb": 16
+    },
+    "k16_plain": {
+      "build": "imm",
+      "bits": 16,
+      "lsb": 0
+    }
+  },
+  "formats": {
+    "alu": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "rD",
+        "rA",
+        "rB",
+        "alu_op"
+      ],
+      "unused": [
+        "10"
+      ]
+    },
+    "imm": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "rD",
+        "rA",
+        "imm16"
+      ]
+    },
+    "k": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "rD",
+        "rA",
+        "k16"
+      ]
+    },
+    "shift": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "rD",
+        "rA",
+        "shift_op",
+        "shift_l"
+      ],
+      "unused": [
+        "15-8"
+      ]
+    },
+    "sf": {
+      "size": 4,
+      "fields": [
+        "sf_op",
+        "rA",
+        "rB"
+      ],
+      "unused": [
+        "10-0"
+      ]
+    },
+    "store": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "store_imm",
+        "rA",
+        "rB"
+      ]
+    },
+    "n": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "n26"
+      ]
+    },
+    "jr": {
+      "size": 4,
+      "fields": [
+        "opcode",
+        "rB"
+      ],
+      "unused": [
+        "25-16",
+        "10-0"
+      ]
+    }
+  },
+  "modeSets": {
+    "alu": {
+      "formats": {
+        "default": "alu"
+      },
+      "op1": {
+        "reg1": "rD"
+      },
+      "op2": {
+        "reg1": "rA"
+      },
+      "op3": {
+        "reg1": "rB"
+      },
+      "patterns": {
+        "reg, reg, reg": {}
+      }
+    },
+    "imm": {
+      "formats": {
+        "default": "imm"
+      },
+      "op1": {
+        "reg1": "rD"
+      },
+      "op2": {
+        "reg1": "rA"
+      },
+      "op3": {
+        "num1": "imm16"
+      },
+      "patterns": {
+        "reg, reg, imm": {},
+        "reg, reg, lo(imm|local|reloc)": {}
+      }
+    },
+    "k": {
+      "formats": {
+        "default": "k"
+      },
+      "op1": {
+        "reg1": "rD"
+      },
+      "op2": {
+        "reg1": "rA"
+      },
+      "op3": {
+        "num1": "k16"
+      },
+      "patterns": {
+        "reg, reg, imm": {},
+        "reg, reg, lo(imm|local|reloc)": {}
+      }
+    },
+    "shift": {
+      "formats": {
+        "default": "shift"
+      },
+      "op1": {
+        "reg1": "rD"
+      },
+      "op2": {
+        "reg1": "rA"
+      },
+      "op3": {
+        "num1": "shift_l"
+      },
+      "patterns": {
+        "reg, reg, imm": {}
+      }
+    },
+    "sf": {
+      "formats": {
+        "default": "sf"
+      },
+      "op1": {
+        "reg1": "rA"
+      },
+      "op2": {
+        "reg1": "rB"
+      },
+      "patterns": {
+        "reg, reg": {}
+      }
+    },
+    "load": {
+      "formats": {
+        "default": "imm"
+      },
+      "op1": {
+        "reg1": "rD"
+      },
+      "op2": {
+        "reg1": "rA",
+        "num1": "imm16"
+      },
+      "patterns": {
+        "reg, [reg + imm]": {},
+        "reg, [reg + lo(imm|local|reloc)]": {}
+      }
+    },
+    "store": {
+      "formats": {
+        "default": "store"
+      },
+      "op1": {
+        "reg1": "rA",
+        "num1": "store_imm"
+      },
+      "op2": {
+        "reg1": "rB"
+      },
+      "patterns": {
+        "[reg + imm], reg": {},
+        "[reg + lo(imm|local|reloc)], reg": {}
+      }
+    },
+    "n": {
+      "formats": {
+        "default": "n"
+      },
+      "op1": {
+        "num1": "n26"
+      },
+      "patterns": {
+        "imm|local|reloc": {}
+      }
+    },
+    "jr": {
+      "formats": {
+        "default": "jr"
+      },
+      "op1": {
+        "reg1": "rB"
+      },
+      "patterns": {
+        "reg": {}
+      }
+    }
+  },
+  "instructions": {
+    "l.and": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 3
+      }
+    },
+    "l.or": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 4
+      }
+    },
+    "l.addi": {
+      "modeSet": "imm",
+      "set": {
+        "opcode": "0x27"
+      }
+    },
+    "l.xori": {
+      "modeSet": "imm",
+      "set": {
+        "opcode": "0x2b"
+      }
+    },
+    "l.ori": {
+      "modeSet": "k",
+      "set": {
+        "opcode": "0x2a"
+      }
+    },
+    "l.sfne": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x721"
+      }
+    },
+    "l.sfges": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x72b"
+      }
+    },
+    "l.lwz": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x21"
+      }
+    },
+    "l.sw": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x35"
+      }
+    },
+    "l.j": {
+      "modeSet": "n",
+      "set": {
+        "opcode": "0x00"
+      }
+    },
+    "l.jal": {
+      "modeSet": "n",
+      "set": {
+        "opcode": "0x01"
+      }
+    },
+    "l.bnf": {
+      "modeSet": "n",
+      "set": {
+        "opcode": "0x03"
+      }
+    },
+    "l.bf": {
+      "modeSet": "n",
+      "set": {
+        "opcode": "0x04"
+      }
+    },
+    "l.jr": {
+      "modeSet": "jr",
+      "set": {
+        "opcode": "0x11"
+      }
+    },
+    "l.movhi": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "opcode",
+            "rD",
+            "movhi_zero",
+            "movhi_k"
+          ],
+          "unused": [
+            "20-17"
+          ],
+          "set": {
+            "opcode": "0x06"
+          },
+          "from": {
+            "rD": "op1.reg1",
+            "movhi_k": "op2.num1"
+          }
+        },
+        "reg, hi(imm|local|reloc)": {
+          "size": 4,
+          "fields": [
+            "opcode",
+            "rD",
+            "movhi_zero",
+            "hi16"
+          ],
+          "unused": [
+            "20-17"
+          ],
+          "set": {
+            "opcode": "0x06"
+          },
+          "from": {
+            "rD": "op1.reg1",
+            "hi16": "op2.num1"
+          }
+        },
+        "reg, ha(imm|local|reloc)": {
+          "size": 4,
+          "fields": [
+            "opcode",
+            "rD",
+            "movhi_zero",
+            "ha16"
+          ],
+          "unused": [
+            "20-17"
+          ],
+          "set": {
+            "opcode": "0x06"
+          },
+          "from": {
+            "rD": "op1.reg1",
+            "ha16": "op2.num1"
+          }
+        }
+      }
+    },
+    "l.nop": {
+      "forms": {
+        "": {
+          "bytes": "0x15 0x00 0x00 0x00"
+        },
+        "imm": {
+          "size": 4,
+          "fields": [
+            "top8",
+            "k16_plain"
+          ],
+          "unused": [
+            "23-16"
+          ],
+          "set": {
+            "top8": "0x15"
+          },
+          "from": {
+            "k16_plain": "op1.num1"
+          }
+        }
+      }
+    },
+    "l.sys": {
+      "forms": {
+        "imm": {
+          "size": 4,
+          "fields": [
+            "top16",
+            "k16_plain"
+          ],
+          "set": {
+            "top16": "0x2000"
+          },
+          "from": {
+            "k16_plain": "op1.num1"
+          }
+        }
+      }
+    },
+    "l.add": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 0
+      }
+    },
+    "l.addc": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 1
+      }
+    },
+    "l.sub": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 2
+      }
+    },
+    "l.xor": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": 5
+      }
+    },
+    "l.sll": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": "0x008"
+      }
+    },
+    "l.srl": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": "0x048"
+      }
+    },
+    "l.sra": {
+      "modeSet": "alu",
+      "set": {
+        "opcode": "0x38",
+        "alu_op": "0x088"
+      }
+    },
+    "l.addic": {
+      "modeSet": "imm",
+      "set": {
+        "opcode": "0x28"
+      }
+    },
+    "l.andi": {
+      "modeSet": "k",
+      "set": {
+        "opcode": "0x29"
+      }
+    },
+    "l.sfeq": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x720"
+      }
+    },
+    "l.sfgtu": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x722"
+      }
+    },
+    "l.sfgeu": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x723"
+      }
+    },
+    "l.sfltu": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x724"
+      }
+    },
+    "l.sfleu": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x725"
+      }
+    },
+    "l.sfgts": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x72a"
+      }
+    },
+    "l.sflts": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x72c"
+      }
+    },
+    "l.sfles": {
+      "modeSet": "sf",
+      "set": {
+        "sf_op": "0x72d"
+      }
+    },
+    "l.slli": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x2e",
+        "shift_op": 0
+      }
+    },
+    "l.srli": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x2e",
+        "shift_op": 1
+      }
+    },
+    "l.srai": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x2e",
+        "shift_op": 2
+      }
+    },
+    "l.lws": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x22"
+      }
+    },
+    "l.lbz": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x23"
+      }
+    },
+    "l.lbs": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x24"
+      }
+    },
+    "l.lhz": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x25"
+      }
+    },
+    "l.lhs": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x26"
+      }
+    },
+    "l.sb": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x36"
+      }
+    },
+    "l.sh": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x37"
+      }
+    },
+    "l.jalr": {
+      "modeSet": "jr",
+      "set": {
+        "opcode": "0x12"
+      }
+    },
+    "l.mfspr": {
+      "forms": {
+        "reg, reg, imm": {
+          "size": 4,
+          "fields": [
+            "opcode",
+            "rD",
+            "rA",
+            "k16_plain"
+          ],
+          "set": {
+            "opcode": "0x2d"
+          },
+          "from": {
+            "rD": "op1.reg1",
+            "rA": "op2.reg1",
+            "k16_plain": "op3.num1"
+          }
+        }
+      }
+    },
+    "l.mtspr": {
+      "forms": {
+        "reg, reg, imm": {
+          "size": 4,
+          "fields": [
+            "opcode",
+            "mtspr_k",
+            "rA",
+            "rB"
+          ],
+          "set": {
+            "opcode": "0x30"
+          },
+          "from": {
+            "rA": "op1.reg1",
+            "rB": "op2.reg1",
+            "mtspr_k": "op3.num1"
+          }
+        }
+      }
+    },
+    "l.rfe": {
+      "forms": {
+        "": {
+          "bytes": "0x24 0x00 0x00 0x00"
+        }
+      }
+    }
+  }
+}

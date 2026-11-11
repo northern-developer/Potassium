@@ -1,0 +1,1153 @@
+{
+  "cpuName": "TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm)",
+  "description": {
+    "regCount": 8,
+    "addressBits": 16,
+    "byteOrder": "little"
+  },
+  "elf": {
+    "elfClass": 32,
+    "relocations": {}
+  },
+  "fields": {
+    "mode_hi_00": {
+      "build": "con",
+      "value": "0b00",
+      "bits": 2,
+      "lsb": 0
+    },
+    "mode_hi_01": {
+      "build": "con",
+      "value": "0b01",
+      "bits": 2,
+      "lsb": 0
+    },
+    "mode_hi_10": {
+      "build": "con",
+      "value": "0b10",
+      "bits": 2,
+      "lsb": 0
+    },
+    "mode_hi_11": {
+      "build": "con",
+      "value": "0b11",
+      "bits": 2,
+      "lsb": 0
+    },
+    "mode_lo_0": {
+      "build": "con",
+      "value": "0b0",
+      "bits": 1,
+      "lsb": 15
+    },
+    "mode_lo_1": {
+      "build": "con",
+      "value": "0b1",
+      "bits": 1,
+      "lsb": 15
+    },
+    "s0": {
+      "build": "con",
+      "value": "0b0",
+      "bits": 1,
+      "lsb": 14
+    },
+    "s1": {
+      "build": "con",
+      "value": "0b1",
+      "bits": 1,
+      "lsb": 14
+    },
+    "reg_v1": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 8
+    },
+    "reg_v2": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 11
+    },
+    "imm_hi_imm_lo": {
+      "build": "imm",
+      "pieces": [
+        {
+          "bits": 8,
+          "lsb": 24
+        },
+        {
+          "bits": 8,
+          "lsb": 16,
+          "valueLsb": 8
+        }
+      ]
+    },
+    "imm_hi_imm_lo_addr": {
+      "build": "addr",
+      "pieces": [
+        {
+          "bits": 8,
+          "lsb": 24
+        },
+        {
+          "bits": 8,
+          "lsb": 16,
+          "valueLsb": 8
+        }
+      ]
+    },
+    "imm_hi2_imm_lo2": {
+      "build": "imm",
+      "pieces": [
+        {
+          "bits": 8,
+          "lsb": 24
+        },
+        {
+          "bits": 8,
+          "lsb": 16,
+          "valueLsb": 8
+        }
+      ]
+    },
+    "imm_hi2_imm_lo2_addr": {
+      "build": "addr",
+      "pieces": [
+        {
+          "bits": 8,
+          "lsb": 24
+        },
+        {
+          "bits": 8,
+          "lsb": 16,
+          "valueLsb": 8
+        }
+      ]
+    },
+    "AAA": {
+      "build": "con",
+      "value": "0b000000",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAB": {
+      "build": "con",
+      "value": "0b000001",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAC": {
+      "build": "con",
+      "value": "0b000010",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAD": {
+      "build": "con",
+      "value": "0b000011",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAE": {
+      "build": "con",
+      "value": "0b000100",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAF": {
+      "build": "con",
+      "value": "0b000101",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAG": {
+      "build": "con",
+      "value": "0b000110",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAH": {
+      "build": "con",
+      "value": "0b000111",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAI": {
+      "build": "con",
+      "value": "0b001000",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAJ": {
+      "build": "con",
+      "value": "0b001001",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAK": {
+      "build": "con",
+      "value": "0b001010",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAL": {
+      "build": "con",
+      "value": "0b001011",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAM": {
+      "build": "con",
+      "value": "0b001100",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAN": {
+      "build": "con",
+      "value": "0b001101",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAO": {
+      "build": "con",
+      "value": "0b001110",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAP": {
+      "build": "con",
+      "value": "0b001111",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAQ": {
+      "build": "con",
+      "value": "0b010000",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAR": {
+      "build": "con",
+      "value": "0b010001",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAS": {
+      "build": "con",
+      "value": "0b010010",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAT": {
+      "build": "con",
+      "value": "0b010011",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAU": {
+      "build": "con",
+      "value": "0b010100",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAV": {
+      "build": "con",
+      "value": "0b010101",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAW": {
+      "build": "con",
+      "value": "0b010110",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAX": {
+      "build": "con",
+      "value": "0b010111",
+      "bits": 6,
+      "lsb": 2
+    },
+    "AAY": {
+      "build": "con",
+      "value": "0b011000",
+      "bits": 6,
+      "lsb": 2
+    },
+    "reg_v3": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 16
+    },
+    "AAZ": {
+      "build": "con",
+      "value": "0b011001",
+      "bits": 6,
+      "lsb": 2
+    },
+    "sib_base": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 8
+    },
+    "sib_index": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 11
+    },
+    "sib_scale": {
+      "build": "scl",
+      "bits": 2,
+      "lsb": 14
+    },
+    "sib_disp": {
+      "build": "imm",
+      "bits": 8,
+      "lsb": 16
+    },
+    "sib_disp_addr": {
+      "build": "addr",
+      "bits": 8,
+      "lsb": 16
+    }
+  },
+  "instructions": {
+    "AAA": {
+      "forms": {
+        "": {
+          "size": 2,
+          "fields": [
+            "AAA"
+          ],
+          "unused": [
+            "15-8",
+            "1-0"
+          ]
+        }
+      }
+    },
+    "AAB": {
+      "forms": {
+        "reg": {
+          "size": 2,
+          "fields": [
+            "AAB",
+            "mode_hi_00",
+            "mode_lo_0",
+            "reg_v1"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1"
+          }
+        }
+      }
+    },
+    "AAC": {
+      "forms": {
+        "[reg]": {
+          "size": 2,
+          "fields": [
+            "AAC",
+            "mode_hi_00",
+            "mode_lo_1",
+            "reg_v1"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1"
+          }
+        }
+      }
+    },
+    "AAD": {
+      "forms": {
+        "imm": {
+          "size": 4,
+          "fields": [
+            "AAD",
+            "mode_hi_01",
+            "mode_lo_0",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 4,
+          "fields": [
+            "AAD",
+            "mode_hi_01",
+            "mode_lo_0",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAE": {
+      "forms": {
+        "[imm]": {
+          "size": 4,
+          "fields": [
+            "AAE",
+            "mode_hi_01",
+            "mode_lo_1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAE",
+            "mode_hi_01",
+            "mode_lo_1",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAF": {
+      "forms": {
+        "[reg + imm]": {
+          "size": 4,
+          "fields": [
+            "AAF",
+            "mode_hi_10",
+            "mode_lo_0",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[reg + local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAF",
+            "mode_hi_10",
+            "mode_lo_0",
+            "reg_v1",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAG": {
+      "forms": {
+        "[[reg + imm]]": {
+          "size": 4,
+          "fields": [
+            "AAG",
+            "mode_hi_10",
+            "mode_lo_1",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[[reg + local|reloc]]": {
+          "size": 4,
+          "fields": [
+            "AAG",
+            "mode_hi_10",
+            "mode_lo_1",
+            "reg_v1",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAH": {
+      "forms": {
+        "[pc + imm]": {
+          "size": 4,
+          "fields": [
+            "AAH",
+            "mode_hi_11",
+            "mode_lo_0",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[pc + local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAH",
+            "mode_hi_11",
+            "mode_lo_0",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAI": {
+      "forms": {
+        "[[pc + imm]]": {
+          "size": 4,
+          "fields": [
+            "AAI",
+            "mode_hi_11",
+            "mode_lo_1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[[pc + local|reloc]]": {
+          "size": 4,
+          "fields": [
+            "AAI",
+            "mode_hi_11",
+            "mode_lo_1",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "14-8"
+          ],
+          "from": {
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAJ": {
+      "forms": {
+        "reg, reg": {
+          "size": 2,
+          "fields": [
+            "AAJ",
+            "mode_hi_00",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        }
+      }
+    },
+    "AAK": {
+      "forms": {
+        "reg, [reg]": {
+          "size": 2,
+          "fields": [
+            "AAK",
+            "mode_hi_00",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        }
+      }
+    },
+    "AAL": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "AAL",
+            "mode_hi_01",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 4,
+          "fields": [
+            "AAL",
+            "mode_hi_01",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAM": {
+      "forms": {
+        "reg, [imm]": {
+          "size": 4,
+          "fields": [
+            "AAM",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, [local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAM",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAN": {
+      "forms": {
+        "reg, [reg + imm]": {
+          "size": 4,
+          "fields": [
+            "AAN",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi2_imm_lo2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, [reg + local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAN",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAO": {
+      "forms": {
+        "reg, [[reg + imm]]": {
+          "size": 4,
+          "fields": [
+            "AAO",
+            "mode_hi_10",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi2_imm_lo2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, [[reg + local|reloc]]": {
+          "size": 4,
+          "fields": [
+            "AAO",
+            "mode_hi_10",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAP": {
+      "forms": {
+        "reg, [pc + imm]": {
+          "size": 4,
+          "fields": [
+            "AAP",
+            "mode_hi_11",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, [pc + local|reloc]": {
+          "size": 4,
+          "fields": [
+            "AAP",
+            "mode_hi_11",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAQ": {
+      "forms": {
+        "reg, [[pc + imm]]": {
+          "size": 4,
+          "fields": [
+            "AAQ",
+            "mode_hi_11",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2": "op2.num1"
+          }
+        },
+        "reg, [[pc + local|reloc]]": {
+          "size": 4,
+          "fields": [
+            "AAQ",
+            "mode_hi_11",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi2_imm_lo2_addr"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi2_imm_lo2_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AAR": {
+      "forms": {
+        "reg, reg": {
+          "size": 2,
+          "fields": [
+            "AAR",
+            "mode_hi_00",
+            "mode_lo_0",
+            "s1",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        }
+      }
+    },
+    "AAS": {
+      "forms": {
+        "[reg], reg": {
+          "size": 2,
+          "fields": [
+            "AAS",
+            "mode_hi_00",
+            "mode_lo_1",
+            "s1",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        }
+      }
+    },
+    "AAT": {
+      "forms": {
+        "[imm], reg": {
+          "size": 4,
+          "fields": [
+            "AAT",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[local|reloc], reg": {
+          "size": 4,
+          "fields": [
+            "AAT",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAU": {
+      "forms": {
+        "[reg + imm], reg": {
+          "size": 4,
+          "fields": [
+            "AAU",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s1",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[reg + local|reloc], reg": {
+          "size": 4,
+          "fields": [
+            "AAU",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s1",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo_addr"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAV": {
+      "forms": {
+        "[[reg + imm]], reg": {
+          "size": 4,
+          "fields": [
+            "AAV",
+            "mode_hi_10",
+            "mode_lo_1",
+            "s1",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[[reg + local|reloc]], reg": {
+          "size": 4,
+          "fields": [
+            "AAV",
+            "mode_hi_10",
+            "mode_lo_1",
+            "s1",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo_addr"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAW": {
+      "forms": {
+        "[pc + imm], reg": {
+          "size": 4,
+          "fields": [
+            "AAW",
+            "mode_hi_11",
+            "mode_lo_0",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[pc + local|reloc], reg": {
+          "size": 4,
+          "fields": [
+            "AAW",
+            "mode_hi_11",
+            "mode_lo_0",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAX": {
+      "forms": {
+        "[[pc + imm]], reg": {
+          "size": 4,
+          "fields": [
+            "AAX",
+            "mode_hi_11",
+            "mode_lo_1",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op1.num1"
+          }
+        },
+        "[[pc + local|reloc]], reg": {
+          "size": 4,
+          "fields": [
+            "AAX",
+            "mode_hi_11",
+            "mode_lo_1",
+            "s1",
+            "reg_v2",
+            "imm_hi_imm_lo_addr"
+          ],
+          "unused": [
+            "10-8"
+          ],
+          "from": {
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "AAY": {
+      "forms": {
+        "reg, reg, reg": {
+          "size": 3,
+          "fields": [
+            "AAY",
+            "reg_v1",
+            "reg_v2",
+            "reg_v3"
+          ],
+          "unused": [
+            "23-19",
+            "15-14",
+            "1-0"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "reg_v3": "op3.reg1"
+          }
+        }
+      }
+    },
+    "AAZ": {
+      "forms": {
+        "[reg + reg * imm + imm]": {
+          "size": 3,
+          "fields": [
+            "AAZ",
+            "sib_base",
+            "sib_index",
+            "sib_scale",
+            "sib_disp"
+          ],
+          "unused": [
+            "1-0"
+          ],
+          "from": {
+            "sib_base": "op1.reg1",
+            "sib_index": "op1.reg2",
+            "sib_scale": "op1.num2",
+            "sib_disp": "op1.num1"
+          }
+        },
+        "[reg + reg * imm + local|reloc]": {
+          "size": 3,
+          "fields": [
+            "AAZ",
+            "sib_base",
+            "sib_index",
+            "sib_scale",
+            "sib_disp_addr"
+          ],
+          "unused": [
+            "1-0"
+          ],
+          "from": {
+            "sib_base": "op1.reg1",
+            "sib_index": "op1.reg2",
+            "sib_scale": "op1.num2",
+            "sib_disp_addr": "op1.num1"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "cpuName": "PCB",
+  "maxOperands": 2,
+  "description": {
+    "regCount": 8,
+    "addressBits": 16,
+    "byteOrder": "little"
+  },
+  "elf": {
+    "eMachine": 62,
+    "elfClass": 64,
+    "relocations": {
+      "pcrel": 2
+    }
+  },
+  "fields": {
+    "op": {
+      "build": "con",
+      "value": "0x10",
+      "bits": 8,
+      "lsb": 0
+    },
+    "disp8": {
+      "build": "pcrel",
+      "bits": 8,
+      "lsb": 8
+    },
+    "tail": {
+      "build": "con",
+      "value": "0xaa",
+      "bits": 8,
+      "lsb": 16
+    }
+  },
+  "instructions": {
+    "B": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 3,
+          "fields": [
+            "op",
+            "disp8",
+            "tail"
+          ],
+          "from": {
+            "disp8": "op1.num1"
+          }
+        }
+      }
+    }
+  }
+}

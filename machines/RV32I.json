@@ -1,0 +1,829 @@
+{
+  "cpuName": "RV32I",
+  "maxOperands": 3,
+  "description": {
+    "regCount": 32,
+    "addressBits": 32,
+    "byteOrder": "little",
+    "relOffset": "before"
+  },
+  "elf": {
+    "eMachine": 243,
+    "elfClass": 32,
+    "relocations": {
+      "addr32": 1
+    }
+  },
+  "fields": {
+    "opcode": {
+      "build": "set",
+      "bits": 7,
+      "lsb": 0
+    },
+    "rd": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 7
+    },
+    "funct3": {
+      "build": "set",
+      "bits": 3,
+      "lsb": 12
+    },
+    "rs1": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 15
+    },
+    "rs2": {
+      "build": "reg",
+      "bits": 5,
+      "lsb": 20
+    },
+    "funct7": {
+      "build": "set",
+      "bits": 7,
+      "lsb": 25
+    },
+    "i_imm": {
+      "build": "addr",
+      "signed": true,
+      "bits": 12,
+      "lsb": 20,
+      "relocation": 27
+    },
+    "shamt": {
+      "build": "imm",
+      "bits": 5,
+      "lsb": 20
+    },
+    "s_imm": {
+      "build": "addr",
+      "signed": true,
+      "relocation": 28,
+      "pieces": [
+        {
+          "bits": 5,
+          "lsb": 7,
+          "valueLsb": 0
+        },
+        {
+          "bits": 7,
+          "lsb": 25,
+          "valueLsb": 5
+        }
+      ]
+    },
+    "b_off": {
+      "build": "pcrel",
+      "target": "jump",
+      "relocation": 16,
+      "pieces": [
+        {
+          "bits": 4,
+          "lsb": 8,
+          "valueLsb": 1
+        },
+        {
+          "bits": 6,
+          "lsb": 25,
+          "valueLsb": 5
+        },
+        {
+          "bits": 1,
+          "lsb": 7,
+          "valueLsb": 11
+        },
+        {
+          "bits": 1,
+          "lsb": 31,
+          "valueLsb": 12
+        }
+      ]
+    },
+    "u_imm": {
+      "build": "imm",
+      "bits": 20,
+      "lsb": 12
+    },
+    "u_hi": {
+      "build": "addr",
+      "bits": 20,
+      "lsb": 12,
+      "valueLsb": 12,
+      "round": true,
+      "relocation": 26
+    },
+    "j_off": {
+      "build": "pcrel",
+      "target": "jump",
+      "relocation": 17,
+      "pieces": [
+        {
+          "bits": 10,
+          "lsb": 21,
+          "valueLsb": 1
+        },
+        {
+          "bits": 1,
+          "lsb": 20,
+          "valueLsb": 11
+        },
+        {
+          "bits": 8,
+          "lsb": 12,
+          "valueLsb": 12
+        },
+        {
+          "bits": 1,
+          "lsb": 31,
+          "valueLsb": 20
+        }
+      ]
+    },
+    "rd_zero": {
+      "build": "con",
+      "value": 0,
+      "bits": 5,
+      "lsb": 7
+    },
+    "rs1_zero": {
+      "build": "con",
+      "value": 0,
+      "bits": 5,
+      "lsb": 15
+    },
+    "i_zero": {
+      "build": "con",
+      "value": 0,
+      "bits": 12,
+      "lsb": 20
+    },
+    "fence_succ": {
+      "build": "imm",
+      "bits": 4,
+      "lsb": 20
+    },
+    "fence_pred": {
+      "build": "imm",
+      "bits": 4,
+      "lsb": 24
+    },
+    "fence_fm": {
+      "build": "set",
+      "bits": 4,
+      "lsb": 28
+    }
+  },
+  "formats": {
+    "R": {
+      "size": 4,
+      "fields": [
+        "funct7",
+        "rs2",
+        "rs1",
+        "funct3",
+        "rd",
+        "opcode"
+      ]
+    },
+    "I": {
+      "size": 4,
+      "fields": [
+        "i_imm",
+        "rs1",
+        "funct3",
+        "rd",
+        "opcode"
+      ]
+    },
+    "Ishift": {
+      "size": 4,
+      "fields": [
+        "funct7",
+        "shamt",
+        "rs1",
+        "funct3",
+        "rd",
+        "opcode"
+      ]
+    },
+    "S": {
+      "size": 4,
+      "fields": [
+        "s_imm",
+        "rs2",
+        "rs1",
+        "funct3",
+        "opcode"
+      ]
+    },
+    "B": {
+      "size": 4,
+      "fields": [
+        "b_off",
+        "rs2",
+        "rs1",
+        "funct3",
+        "opcode"
+      ]
+    },
+    "U": {
+      "size": 4,
+      "fields": [
+        "u_imm",
+        "rd",
+        "opcode"
+      ]
+    },
+    "Uhi": {
+      "size": 4,
+      "fields": [
+        "u_hi",
+        "rd",
+        "opcode"
+      ]
+    },
+    "J": {
+      "size": 4,
+      "fields": [
+        "j_off",
+        "rd",
+        "opcode"
+      ]
+    },
+    "FENCE": {
+      "size": 4,
+      "fields": [
+        "fence_fm",
+        "fence_pred",
+        "fence_succ",
+        "rs1",
+        "funct3",
+        "rd",
+        "opcode"
+      ]
+    }
+  },
+  "modeSets": {
+    "r": {
+      "formats": {
+        "default": "R"
+      },
+      "op1": {
+        "reg1": "rd"
+      },
+      "op2": {
+        "reg1": "rs1"
+      },
+      "op3": {
+        "reg1": "rs2"
+      },
+      "patterns": {
+        "reg, reg, reg": {}
+      }
+    },
+    "i": {
+      "formats": {
+        "default": "I"
+      },
+      "op1": {
+        "reg1": "rd"
+      },
+      "op2": {
+        "reg1": "rs1"
+      },
+      "op3": {
+        "num1": "i_imm"
+      },
+      "patterns": {
+        "reg, reg, imm": {},
+        "reg, reg, %lo(imm|local|reloc)": {}
+      }
+    },
+    "shift": {
+      "formats": {
+        "default": "Ishift"
+      },
+      "op1": {
+        "reg1": "rd"
+      },
+      "op2": {
+        "reg1": "rs1"
+      },
+      "op3": {
+        "num1": "shamt"
+      },
+      "patterns": {
+        "reg, reg, imm": {}
+      }
+    },
+    "load": {
+      "formats": {
+        "default": "I"
+      },
+      "op1": {
+        "reg1": "rd"
+      },
+      "op2": {
+        "reg1": "rs1",
+        "num1": "i_imm"
+      },
+      "patterns": {
+        "reg, [reg + imm]": {},
+        "reg, [reg + %lo(imm|local|reloc)]": {}
+      }
+    },
+    "store": {
+      "formats": {
+        "default": "S"
+      },
+      "op1": {
+        "reg1": "rs2"
+      },
+      "op2": {
+        "reg1": "rs1",
+        "num1": "s_imm"
+      },
+      "patterns": {
+        "reg, [reg + imm]": {},
+        "reg, [reg + %lo(imm|local|reloc)]": {}
+      }
+    },
+    "branch": {
+      "formats": {
+        "default": "B"
+      },
+      "op1": {
+        "reg1": "rs1"
+      },
+      "op2": {
+        "reg1": "rs2"
+      },
+      "op3": {
+        "num1": "b_off"
+      },
+      "patterns": {
+        "reg, reg, imm|local|reloc": {}
+      }
+    }
+  },
+  "instructions": {
+    "ADD": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 0,
+        "funct7": 0
+      }
+    },
+    "SUB": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 0,
+        "funct7": 32
+      }
+    },
+    "SLL": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 1,
+        "funct7": 0
+      }
+    },
+    "SLT": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 2,
+        "funct7": 0
+      }
+    },
+    "SLTU": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 3,
+        "funct7": 0
+      }
+    },
+    "XOR": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 4,
+        "funct7": 0
+      }
+    },
+    "SRL": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 5,
+        "funct7": 0
+      }
+    },
+    "SRA": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 5,
+        "funct7": 32
+      }
+    },
+    "OR": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 6,
+        "funct7": 0
+      }
+    },
+    "AND": {
+      "modeSet": "r",
+      "set": {
+        "opcode": "0x33",
+        "funct3": 7,
+        "funct7": 0
+      }
+    },
+    "ADDI": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 0
+      }
+    },
+    "SLTI": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 2
+      }
+    },
+    "SLTIU": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 3
+      }
+    },
+    "XORI": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 4
+      }
+    },
+    "ORI": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 6
+      }
+    },
+    "ANDI": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 7
+      }
+    },
+    "SLLI": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 1,
+        "funct7": 0
+      }
+    },
+    "SRLI": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 5,
+        "funct7": 0
+      }
+    },
+    "SRAI": {
+      "modeSet": "shift",
+      "set": {
+        "opcode": "0x13",
+        "funct3": 5,
+        "funct7": 32
+      }
+    },
+    "LB": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x03",
+        "funct3": 0
+      }
+    },
+    "LH": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x03",
+        "funct3": 1
+      }
+    },
+    "LW": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x03",
+        "funct3": 2
+      }
+    },
+    "LBU": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x03",
+        "funct3": 4
+      }
+    },
+    "LHU": {
+      "modeSet": "load",
+      "set": {
+        "opcode": "0x03",
+        "funct3": 5
+      }
+    },
+    "SB": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x23",
+        "funct3": 0
+      }
+    },
+    "SH": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x23",
+        "funct3": 1
+      }
+    },
+    "SW": {
+      "modeSet": "store",
+      "set": {
+        "opcode": "0x23",
+        "funct3": 2
+      }
+    },
+    "BEQ": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 0
+      }
+    },
+    "BNE": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 1
+      }
+    },
+    "BLT": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 4
+      }
+    },
+    "BGE": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 5
+      }
+    },
+    "BLTU": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 6
+      }
+    },
+    "BGEU": {
+      "modeSet": "branch",
+      "set": {
+        "opcode": "0x63",
+        "funct3": 7
+      }
+    },
+    "LUI": {
+      "forms": {
+        "reg, imm": {
+          "format": "U",
+          "set": {
+            "opcode": "0x37"
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "u_imm": "op2.num1"
+          }
+        },
+        "reg, %hi(imm|local|reloc)": {
+          "format": "Uhi",
+          "set": {
+            "opcode": "0x37"
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "u_hi": "op2.num1"
+          }
+        }
+      }
+    },
+    "AUIPC": {
+      "forms": {
+        "reg, imm": {
+          "format": "U",
+          "set": {
+            "opcode": "0x17"
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "u_imm": "op2.num1"
+          }
+        }
+      }
+    },
+    "JAL": {
+      "forms": {
+        "reg, imm|local|reloc": {
+          "format": "J",
+          "set": {
+            "opcode": "0x6f"
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "j_off": "op2.num1"
+          }
+        }
+      }
+    },
+    "JALR": {
+      "modeSet": "i",
+      "set": {
+        "opcode": "0x67",
+        "funct3": 0
+      },
+      "forms": {
+        "reg, [reg + imm]": {
+          "format": "I",
+          "set": {
+            "opcode": "0x67",
+            "funct3": 0
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "rs1": "op2.reg1",
+            "i_imm": "op2.num1"
+          }
+        }
+      }
+    },
+    "FENCE": {
+      "forms": {
+        "": {
+          "bytes": "0x0F 0x00 0xF0 0x0F"
+        },
+        "imm, imm": {
+          "size": 4,
+          "fields": [
+            "fence_fm",
+            "fence_pred",
+            "fence_succ",
+            "rs1_zero",
+            "funct3",
+            "rd_zero",
+            "opcode"
+          ],
+          "set": {
+            "opcode": "0x0f",
+            "funct3": 0,
+            "fence_fm": 0
+          },
+          "from": {
+            "fence_pred": "op1.num1",
+            "fence_succ": "op2.num1"
+          }
+        }
+      }
+    },
+    "ECALL": {
+      "forms": {
+        "": {
+          "bytes": "0x73 0x00 0x00 0x00"
+        }
+      }
+    },
+    "EBREAK": {
+      "forms": {
+        "": {
+          "bytes": "0x73 0x00 0x10 0x00"
+        }
+      }
+    },
+    "NOP": {
+      "forms": {
+        "": {
+          "bytes": "0x13 0x00 0x00 0x00"
+        }
+      }
+    },
+    "RET": {
+      "forms": {
+        "": {
+          "bytes": "0x67 0x80 0x00 0x00"
+        }
+      }
+    },
+    "MV": {
+      "forms": {
+        "reg, reg": {
+          "size": 4,
+          "fields": [
+            "i_zero",
+            "rs1",
+            "funct3",
+            "rd",
+            "opcode"
+          ],
+          "set": {
+            "opcode": "0x13",
+            "funct3": 0
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "rs1": "op2.reg1"
+          }
+        }
+      }
+    },
+    "LI": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "i_imm",
+            "rs1_zero",
+            "funct3",
+            "rd",
+            "opcode"
+          ],
+          "set": {
+            "opcode": "0x13",
+            "funct3": 0
+          },
+          "from": {
+            "rd": "op1.reg1",
+            "i_imm": "op2.num1"
+          }
+        }
+      }
+    },
+    "J": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 4,
+          "fields": [
+            "j_off",
+            "rd_zero",
+            "opcode"
+          ],
+          "set": {
+            "opcode": "0x6f"
+          },
+          "from": {
+            "j_off": "op1.num1"
+          }
+        }
+      }
+    },
+    "JR": {
+      "forms": {
+        "reg": {
+          "size": 4,
+          "fields": [
+            "i_zero",
+            "rs1",
+            "funct3",
+            "rd_zero",
+            "opcode"
+          ],
+          "set": {
+            "opcode": "0x67",
+            "funct3": 0
+          },
+          "from": {
+            "rs1": "op1.reg1"
+          }
+        }
+      }
+    }
+  }
+}

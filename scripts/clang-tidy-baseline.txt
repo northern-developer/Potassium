@@ -1,0 +1,10 @@
+bugprone-easily-swappable-parameters 4
+bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions 1
+cppcoreguidelines-pro-type-reinterpret-cast 4
+cppcoreguidelines-pro-type-static-cast-downcast 4
+cppcoreguidelines-special-member-functions 1
+misc-const-correctness 2
+misc-header-include-cycle 1
+misc-include-cleaner 13
+readability-function-cognitive-complexity 2
+readability-identifier-length 12

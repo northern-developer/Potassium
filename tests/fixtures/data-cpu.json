@@ -1,0 +1,29 @@
+{
+  "cpuName": "DATA",
+  "maxOperands": 2,
+  "description": {
+    "regCount": 1,
+    "addressBits": 16,
+    "byteOrder": "little"
+  },
+  "fields": {
+    "op": {
+      "build": "con",
+      "value": "0x00",
+      "bits": 8,
+      "lsb": 0
+    }
+  },
+  "instructions": {
+    "NOP": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "op"
+          ]
+        }
+      }
+    }
+  }
+}

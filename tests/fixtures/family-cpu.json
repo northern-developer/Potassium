@@ -1,0 +1,67 @@
+{
+  "cpuName": "FAMILY-0",
+  "description": { "regCount": 8, "addressBits": 16, "byteOrder": "little" },
+
+  "fields": {
+    "opcode": { "build": "set", "bits": 6,  "lsb": 10 },
+    "mode":   { "build": "set", "bits": 3,  "lsb": 7  },
+    "dir":    { "build": "set", "bits": 1,  "lsb": 6  },
+    "src":    { "build": "reg", "bits": 3,  "lsb": 3  },
+    "dst":    { "build": "reg", "bits": 3,  "lsb": 0  },
+    "imm16":  { "build": "imm", "bits": 16, "lsb": 16 }
+  },
+
+  "formats": {
+    "none":        { "size": 2, "fields": ["opcode"],                                "unused": ["9-0"] },
+    "one":         { "size": 2, "fields": ["opcode", "mode", "dst"],                 "unused": ["6-3"] },
+    "one_imm":     { "size": 4, "fields": ["opcode", "mode", "dst", "imm16"],        "unused": ["6-3"] },
+    "one_abs":     { "size": 4, "fields": ["opcode", "mode", "imm16"],               "unused": ["6-0"] },
+    "two":         { "size": 2, "fields": ["opcode", "mode", "dir", "src", "dst"] },
+    "two_imm":     { "size": 4, "fields": ["opcode", "mode", "dir", "src", "dst", "imm16"] },
+    "two_abs_src": { "size": 4, "fields": ["opcode", "mode", "dir", "dst", "imm16"], "unused": ["5-3"] },
+    "two_abs_dst": { "size": 4, "fields": ["opcode", "mode", "dir", "src", "imm16"], "unused": ["2-0"] }
+  },
+
+  "modes": {
+    "reg": { "mode": 0 }, "[reg]": { "mode": 1 }, "imm": { "mode": 2 }, "[imm]": { "mode": 3 },
+    "[reg + imm]": { "mode": 4 }, "[[reg + imm]]": { "mode": 5 },
+    "[pc + imm]": { "mode": 6 }, "[[pc + imm]]": { "mode": 7 }
+  },
+
+  "operandSets": {
+    "mem": ["[reg]", "[imm]", "[reg + imm]", "[[reg + imm]]", "[pc + imm]", "[[pc + imm]]"],
+    "any": ["reg", "imm", "mem"]
+  },
+
+  "modeSets": {
+    "none":    { "formats": { "default": "none" }, "patterns": { "": {} } },
+    "reg":     { "formats": { "default": "one" },
+                 "op1": { "reg1": "dst" },
+                 "patterns": { "reg": { "modeFrom": "op1" } } },
+    "any":     { "formats": { "reg": "one", "[reg]": "one", "[reg + imm]": "one_imm", "[[reg + imm]]": "one_imm", "default": "one_abs" },
+                 "op1": { "reg1": "dst", "num1": "imm16" },
+                 "patterns": { "any": { "modeFrom": "op1" } } },
+    "reg_reg": { "formats": { "default": "two" }, "set": { "dir": 0 },
+                 "op1": { "reg1": "dst" }, "op2": { "reg1": "src" },
+                 "patterns": { "reg, reg": { "modeFrom": "op2" } } },
+    "reg_any": { "formats": { "reg": "two", "[reg]": "two", "[reg + imm]": "two_imm", "[[reg + imm]]": "two_imm" },
+                 "op1": { "reg1": "dst", "num1": "imm16" }, "op2": { "reg1": "src", "num1": "imm16" },
+                 "patterns": { "reg, any": { "modeFrom": "op2", "set": { "dir": 0 }, "formats": { "default": "two_abs_src" } },
+                               "mem, reg": { "modeFrom": "op1", "set": { "dir": 1 }, "formats": { "default": "two_abs_dst" } } } },
+    "target":  { "formats": { "[reg]": "one", "[reg + imm]": "one_imm", "[[reg + imm]]": "one_imm", "default": "one_abs" },
+                 "op1": { "reg1": "dst", "num1": "imm16" },
+                 "patterns": { "mem": { "modeFrom": "op1" } } }
+  },
+
+  "instructions": {
+    "NOP":  { "modeSet": "none",    "set": { "opcode": "0b000000" } },
+    "RET":  { "modeSet": "none",    "set": { "opcode": "0b000001" } },
+    "PUSH": { "modeSet": "any",     "set": { "opcode": "0b000010" } },
+    "POP":  { "modeSet": "any",     "set": { "opcode": "0b000011" }, "remove": ["imm"] },
+    "INC":  { "modeSet": "reg",     "set": { "opcode": "0b000100" } },
+    "MOV":  { "modeSet": "reg_any", "set": { "opcode": "0b000101" } },
+    "ADD":  { "modeSet": "reg_reg", "set": { "opcode": "0b000110" } },
+    "JMP":  { "modeSet": "target",  "set": { "opcode": "0b000111" }, "remove": ["[reg + imm]"] },
+    "BR":   { "modeSet": "target",  "set": { "opcode": "0b001000" }, "only": ["[reg]", "[reg + imm]", "[pc + imm]"] }
+  }
+}

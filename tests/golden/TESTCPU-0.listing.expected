@@ -1,0 +1,173 @@
+                        -- TESTCPU-0: not a real CPU. A minimal coverage fixture whose only purpose is to
+                        -- 		exercise every (operand count, addressing mode) combination of a general
+                        -- 		two-operand instruction format with eight addressing modes -- not a
+                        -- 		separate branch format. Mnemonics are sequential placeholders (AAA, AAB, AAC, ...)
+                        -- 		and don't mean anything; there is deliberately no cpu.json for this file yet.
+                        --
+                        -- ArgType legend (matches include/ptasm/assembler/Bom.h's enum):
+                        -- 		1=reg  2=registerIndirect  3=immediate  4=direct  5=indexed  6=indexedIndirect
+                        -- 		7=relative  8=relativeIndirect
+                        --
+                        -- AAA        : 0 operands.
+                        -- AAB - AAI  : 1 operand,  modes 1-8 in order.
+                        -- AAJ - AAQ  : 2 operands, load direction  (dest=reg, src=mode 1-8 in order).
+                        -- AAR - AAX  : 2 operands, store direction (dest=mode, src=reg); mode 3
+                        -- 		(immediate) is skipped here -- storing into a constant is nonsensical,
+                        -- 		as a POP or a store-direction MOV wouldn't take one either.
+                        -- 		AAR covers mode 1 (reg, reg) -- same ArgType pair as AAJ's mode 1, since
+                        -- 		plain reg/reg can't distinguish direction by ArgType alone; the mnemonic
+                        -- 		itself is what carries the direction, same as MOV vs MOVR.
+
+0000                    .ORG 0x0000
+
+0000  00 00             AAA                               -- 0 operands
+
+0002  04 00             AAB R0                            -- 1 operand, mode 1 (reg)
+0004  08 81             AAC [R1]                          -- 1 operand, mode 2 (regindex)
+0006  0D 00 00 05       AAD 0x0005                        -- 1 operand, mode 3 (immediate)
+000A  11 80 00 10       AAE [0x0010]                      -- 1 operand, mode 4 (direct)
+000E  16 02 00 04       AAF [R2 + 0x0004]                 -- 1 operand, mode 5 (indexed)
+0012  1A 83 00 04       AAG [[R3 + 0x0004]]               -- 1 operand, mode 6 (indexedindirect)
+0016  1F 00 00 04       AAH [PC + 0x0004]                 -- 1 operand, mode 7 (relative)
+001A  23 80 00 04       AAI [[PC + 0x0004]]               -- 1 operand, mode 8 (relativeindexed)
+
+001E  24 08             AAJ R0, R1                        -- 2 operands, load, mode 1 (reg)
+0020  28 88             AAK R0, [R1]                      -- 2 operands, load, mode 2 (regindex)
+0022  2D 00 00 05       AAL R0, 0x0005                    -- 2 operands, load, mode 3 (immediate)
+0026  31 80 00 10       AAM R0, [0x0010]                  -- 2 operands, load, mode 4 (direct)
+002A  36 10 00 04       AAN R0, [R2 + 0x0004]             -- 2 operands, load, mode 5 (indexed)
+002E  3A 98 00 04       AAO R0, [[R3 + 0x0004]]           -- 2 operands, load, mode 6 (indexedindirect)
+0032  3F 00 00 04       AAP R0, [PC + 0x0004]             -- 2 operands, load, mode 7 (relative)
+0036  43 80 00 04       AAQ R0, [[PC + 0x0004]]           -- 2 operands, load, mode 8 (relativeindexed)
+
+003A  44 41             AAR R1, R0                        -- 2 operands, store, mode 1 (reg)
+003C  48 C1             AAS [R1], R0                      -- 2 operands, store, mode 2 (regindex)
+003E  4D C0 00 10       AAT [0x0010], R0                  -- 2 operands, store, mode 4 (direct)
+0042  52 42 00 04       AAU [R2 + 0x0004], R0             -- 2 operands, store, mode 5 (indexed)
+0046  56 C3 00 04       AAV [[R3 + 0x0004]], R0           -- 2 operands, store, mode 6 (indexedindirect)
+004A  5B 40 00 04       AAW [PC + 0x0004], R0             -- 2 operands, store, mode 7 (relative)
+004E  5F C0 00 04       AAX [[PC + 0x0004]], R0           -- 2 operands, store, mode 8 (relativeindexed)
+
+                        -- 3 operands, all registers (e.g. RISC-V/ARM-style `ADD Rd, Rs1, Rs2`) --
+                        -- the first real exerciser of ASMline's collective args[kMaxArgs] array
+                        -- (previously hand-duplicated arg1/arg2 fields, which could only ever
+                        -- reach 2 operands no matter what the grammar or any cpu.json allowed).
+0052  60 11 03          AAY R1, R2, R3                    -- 3 operands, all registers
+
+                        -- One example of each '.' directive the grammar supports, appended here so
+                        -- 		none of the (operand count, addressing mode) coverage block above
+                        -- 		shifts address. AAD below exercises that an .EQU constant actually
+                        -- 		*resolves* when referenced (CodeGen::addStaticConstant/
+                        -- 		getSymbolAddress), not just that the directive parses.
+
+0055                    start:                             -- a bare label, for .GLOBAL to mark below
+         start =0055
+                        .GLOBAL start                      -- marks "start" visible outside this file;
+                                                           --   no linker exists yet, purely informational (CodeGen::markGlobal)
+
+                        AAD_WIDTH .EQU 0x0005              -- defines a reusable named constant
+         AAD_WIDTH =0005
+
+0055  0D 00 00 05       AAD AAD_WIDTH                      -- same AAD (mode 3, immediate) rule as above, operand is the
+                                                           --   .EQU constant instead of a literal
+
+                        BIG64 .EQU 0xFFFFFFFFFFFFFFFF      -- exercises the full 64-bit width end-to-end (see plan/0.1/ISSUES.md's
+         BIG64 =FFFFFFFFFFFFFFFF
+                                                           --   integer-width widening) -- not referenced by any
+                                                           --   instruction (no field here is wider than 16 bits), just
+                                                           --   confirms parsing/storage/resolution don't truncate or
+                                                           --   saturate; see test_examples.cpp's dedicated check
+
+0059  01 02 03          MyBytes: .BYTE 0x01, 0x02, 0x03    -- a literal byte list
+         MyBytes =0059
+005C                    MyAscii: .ASCII "done\n"           -- a raw string, no auto-terminator
+         MyAscii =005C
+005C  64 6F 6E 65
+0060  0A
+0061                    MyAsciz: .ASCIZ "done"             -- like .ASCII, but auto-terminated with a trailing \0
+         MyAsciz =0061
+0061  64 6F 6E 65
+0065  00
+0066  02 01 04 03       MyWord:  .WORD 0x0102, 0x0304      -- 16-bit values, little-endian
+         MyWord =0066
+006A  04 03 02 01       MyLong:  .LONG 0x01020304          -- 32-bit values, little-endian (.INT is an accepted alias)
+         MyLong =006A
+006E                    MyQuad:  .QUAD 0x0102030405060708  -- 64-bit values, little-endian
+         MyQuad =006E
+006E  08 07 06 05
+0072  04 03 02 01
+
+                        .EXTERN SomeOtherFilesFunction     -- records a symbol expected to be defined elsewhere;
+                                                           --   purely informational today (CodeGen::markExtern), same
+                                                           --   as .GLOBAL before the ELF writer existed to consult it
+
+0076  00 00             .ALIGN 4                           -- pads with 0x00 until the address is a multiple of 4
+0078  AA                MyAligned: .BYTE 0xAA              -- lands on a 4-byte boundary because of the .ALIGN above
+         MyAligned =0078
+
+                        -- Expressions are sums and differences of numbers, .EQU names and labels;
+                        -- a difference of two labels in one block is a constant.
+                        AAD_SPAN .EQU MyAligned - MyBytes  -- 0x1F: .EQU may use labels already defined
+         AAD_SPAN =001F
+0079  0D 00 00 23       AAD AAD_WIDTH + AAD_SPAN - 1       -- 0x23
+007D  2D 01 00 20       AAL R1, MyAligned - MyBytes + 1    -- the same difference, inline
+
+                        -- .SET is a constant that may be set again; a use sees the nearest .SET above.
+                        COUNT .SET 1
+         COUNT =0001
+0081  0D 00 00 01       AAD COUNT                          -- 1
+                        COUNT .SET COUNT + 1
+         COUNT =0002
+0085  0D 00 00 02       AAD COUNT                          -- 2
+
+0089  00 00 00          .SPACE 3                           -- three zero bytes
+008C                    Utf8: .ASCIZ "héllo, wörld ✓"      -- UTF-8 in a string keeps its bytes (and in a comment: π ≈ 3.14)
+         Utf8 =008C
+008C  68 C3 A9 6C
+0090  6C 6F 2C 20
+0094  77 C3 B6 72
+0098  6C 64 20 E2
+009C  9C 93 00
+
+                        -- AT&T has a scaled-index operand, disp(base, index, scale), that Intel
+                        -- syntax can't spell; TESTCPU-0.s writes it as AAZ 4(%R1, %R2, 2), these
+                        -- are the bytes it assembles to.
+009F  64 51 04          .BYTE 0x64, 0x51, 0x04                -- AT&T: AAZ 4(%R1, %R2, 2)
+
+                        -- A second block: the gap before it is zero-filled in -f bin, and -f hex
+                        -- starts a new record there.
+00A2                    ; end of ORG_0: next free 00A2
+0200                    .ORG 0x0200
+
+0200  00 00             AAA
+0202  04 01             AAB R1
+0204  65 6E 64 00       Tail: .ASCIZ "end"
+         Tail =0204
+0208                    ; end of ORG_1: next free 0208
+
+Segments and Groups:
+
+                N a m e                 Size     Length   Align   Class
+
+ORG_0 . . . . . . . . . . . . . . . . . 16 Bit   00A2     DWORD   'CODE'
+ORG_1 . . . . . . . . . . . . . . . . . 16 Bit   0008     BYTE    'CODE'
+
+
+Symbols:
+
+                N a m e                 Type     Value    Attr
+
+AAD_SPAN  . . . . . . . . . . . . . . . NUMBER   001F     EQU
+AAD_WIDTH . . . . . . . . . . . . . . . NUMBER   0005     EQU
+BIG64 . . . . . . . . . . . . . . . . . NUMBER   FFFFFFFFFFFFFFFF EQU
+COUNT . . . . . . . . . . . . . . . . . NUMBER   0002     SET
+MyAligned . . . . . . . . . . . . . . . ADDR     0078     BYTE
+MyAscii . . . . . . . . . . . . . . . . ADDR     005C     ASCII
+MyAsciz . . . . . . . . . . . . . . . . ADDR     0061     ASCIZ
+MyBytes . . . . . . . . . . . . . . . . ADDR     0059     BYTE
+MyLong  . . . . . . . . . . . . . . . . ADDR     006A     LONG
+MyQuad  . . . . . . . . . . . . . . . . ADDR     006E     QUAD
+MyWord  . . . . . . . . . . . . . . . . ADDR     0066     WORD
+Tail  . . . . . . . . . . . . . . . . . ADDR     0204     ASCIZ
+Utf8  . . . . . . . . . . . . . . . . . ADDR     008C     ASCIZ
+start . . . . . . . . . . . . . . . . . ADDR     0055     GLOBAL

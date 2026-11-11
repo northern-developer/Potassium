@@ -1,0 +1,442 @@
+{
+  "cpuName": "i386 (minimal, for ELFCLASS32 with REL: MOV, ADD/SUB/AND/CMP r32-imm32, PUSH/POP r32, INC [abs32], JNE rel8/rel32, CALL rel32, RET)",
+  "maxOperands": 2,
+  "description": {
+    "regCount": 8,
+    "addressBits": 32,
+    "byteOrder": "little",
+    "relOffset": "after"
+  },
+  "elf": {
+    "eMachine": 3,
+    "elfClass": 32,
+    "relocationFormat": "rel",
+    "relocations": {
+      "addr32": 1,
+      "pcrel32": 2
+    }
+  },
+  "fields": {
+    "mov_base": {
+      "build": "con",
+      "value": "0b10111",
+      "bits": 5,
+      "lsb": 3
+    },
+    "reg_id3": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 0
+    },
+    "imm32": {
+      "build": "imm",
+      "bits": 32,
+      "lsb": 8
+    },
+    "imm32_addr": {
+      "build": "addr",
+      "bits": 32,
+      "lsb": 8
+    },
+    "ret_op": {
+      "build": "con",
+      "value": "0b11000011",
+      "bits": 8,
+      "lsb": 0
+    },
+    "call_base": {
+      "build": "con",
+      "value": "0b11101000",
+      "bits": 8,
+      "lsb": 0
+    },
+    "call_rel32": {
+      "build": "pcrel",
+      "bits": 32,
+      "lsb": 8,
+      "target": "call"
+    },
+    "push_base": {
+      "build": "con",
+      "value": "0b01010",
+      "bits": 5,
+      "lsb": 3
+    },
+    "pop_base": {
+      "build": "con",
+      "value": "0b01011",
+      "bits": 5,
+      "lsb": 3
+    },
+    "alu_base": {
+      "build": "con",
+      "value": "0b10000001",
+      "bits": 8,
+      "lsb": 0
+    },
+    "add_modrm_fixed": {
+      "build": "con",
+      "value": "0b11000",
+      "bits": 5,
+      "lsb": 11
+    },
+    "and_modrm_fixed": {
+      "build": "con",
+      "value": "0b11100",
+      "bits": 5,
+      "lsb": 11
+    },
+    "sub_modrm_fixed": {
+      "build": "con",
+      "value": "0b11101",
+      "bits": 5,
+      "lsb": 11
+    },
+    "cmp_modrm_fixed": {
+      "build": "con",
+      "value": "0b11111",
+      "bits": 5,
+      "lsb": 11
+    },
+    "modrm_rm": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 8
+    },
+    "imm32_at16": {
+      "build": "imm",
+      "bits": 32,
+      "lsb": 16
+    },
+    "imm32_at16_addr": {
+      "build": "addr",
+      "bits": 32,
+      "lsb": 16
+    },
+    "mov_rr_base": {
+      "build": "con",
+      "value": "0b10001001",
+      "bits": 8,
+      "lsb": 0
+    },
+    "mov_rr_mod": {
+      "build": "con",
+      "value": "0b11",
+      "bits": 2,
+      "lsb": 14
+    },
+    "mov_rr_src": {
+      "build": "reg",
+      "bits": 3,
+      "lsb": 11
+    },
+    "inc_base": {
+      "build": "con",
+      "value": "0b11111111",
+      "bits": 8,
+      "lsb": 0
+    },
+    "inc_modrm_abs": {
+      "build": "con",
+      "value": "0b00000101",
+      "bits": 8,
+      "lsb": 8
+    },
+    "jne_base": {
+      "build": "con",
+      "value": "0b01110101",
+      "bits": 8,
+      "lsb": 0
+    },
+    "jne_rel8": {
+      "build": "pcrel",
+      "bits": 8,
+      "lsb": 8,
+      "target": "jump"
+    },
+    "jne_long_escape": {
+      "build": "con",
+      "value": "0x0F",
+      "bits": 8,
+      "lsb": 0
+    },
+    "jne_long_base": {
+      "build": "con",
+      "value": "0x85",
+      "bits": 8,
+      "lsb": 8
+    },
+    "jne_rel32": {
+      "build": "pcrel",
+      "bits": 32,
+      "lsb": 16,
+      "target": "jump"
+    }
+  },
+  "instructions": {
+    "MOV": {
+      "forms": {
+        "reg, imm": {
+          "size": 5,
+          "fields": [
+            "mov_base",
+            "reg_id3",
+            "imm32"
+          ],
+          "from": {
+            "reg_id3": "op1.reg1",
+            "imm32": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 5,
+          "fields": [
+            "mov_base",
+            "reg_id3",
+            "imm32_addr"
+          ],
+          "from": {
+            "reg_id3": "op1.reg1",
+            "imm32_addr": "op2.num1"
+          }
+        },
+        "reg, reg": {
+          "size": 2,
+          "fields": [
+            "mov_rr_base",
+            "mov_rr_mod",
+            "mov_rr_src",
+            "modrm_rm"
+          ],
+          "from": {
+            "mov_rr_src": "op2.reg1",
+            "modrm_rm": "op1.reg1"
+          }
+        }
+      }
+    },
+    "CALL": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 5,
+          "fields": [
+            "call_base",
+            "call_rel32"
+          ],
+          "from": {
+            "call_rel32": "op1.num1"
+          }
+        }
+      }
+    },
+    "RET": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "ret_op"
+          ]
+        }
+      }
+    },
+    "PUSH": {
+      "forms": {
+        "reg": {
+          "size": 1,
+          "fields": [
+            "push_base",
+            "reg_id3"
+          ],
+          "from": {
+            "reg_id3": "op1.reg1"
+          }
+        }
+      }
+    },
+    "POP": {
+      "forms": {
+        "reg": {
+          "size": 1,
+          "fields": [
+            "pop_base",
+            "reg_id3"
+          ],
+          "from": {
+            "reg_id3": "op1.reg1"
+          }
+        }
+      }
+    },
+    "ADD": {
+      "forms": {
+        "reg, imm": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "add_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "add_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16_addr"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "AND": {
+      "forms": {
+        "reg, imm": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "and_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "and_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16_addr"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "SUB": {
+      "forms": {
+        "reg, imm": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "sub_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "sub_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16_addr"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "CMP": {
+      "forms": {
+        "reg, imm": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "cmp_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 6,
+          "fields": [
+            "alu_base",
+            "cmp_modrm_fixed",
+            "modrm_rm",
+            "imm32_at16_addr"
+          ],
+          "from": {
+            "modrm_rm": "op1.reg1",
+            "imm32_at16_addr": "op2.num1"
+          }
+        }
+      }
+    },
+    "INC": {
+      "forms": {
+        "[imm]": {
+          "size": 6,
+          "fields": [
+            "inc_base",
+            "inc_modrm_abs",
+            "imm32_at16"
+          ],
+          "from": {
+            "imm32_at16": "op1.num1"
+          }
+        },
+        "[local|reloc]": {
+          "size": 6,
+          "fields": [
+            "inc_base",
+            "inc_modrm_abs",
+            "imm32_at16_addr"
+          ],
+          "from": {
+            "imm32_at16_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "JNE": {
+      "forms": {
+        "local": {
+          "size": 2,
+          "fields": [
+            "jne_base",
+            "jne_rel8"
+          ],
+          "from": {
+            "jne_rel8": "op1.num1"
+          }
+        },
+        "imm|reloc": {
+          "size": 6,
+          "fields": [
+            "jne_long_escape",
+            "jne_long_base",
+            "jne_rel32"
+          ],
+          "from": {
+            "jne_rel32": "op1.num1"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "cpuName": "SAP-1",
+  "description": {
+    "regCount": 0,
+    "addressBits": 4,
+    "byteOrder": "little"
+  },
+  "fields": {
+    "op_nop": {
+      "build": "con",
+      "value": "0b0000",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_lda": {
+      "build": "con",
+      "value": "0b0001",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_add": {
+      "build": "con",
+      "value": "0b0010",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_sub": {
+      "build": "con",
+      "value": "0b0011",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_sta": {
+      "build": "con",
+      "value": "0b0100",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_ldi": {
+      "build": "con",
+      "value": "0b0101",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_jmp": {
+      "build": "con",
+      "value": "0b0110",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_out": {
+      "build": "con",
+      "value": "0b1110",
+      "bits": 4,
+      "lsb": 4
+    },
+    "op_hlt": {
+      "build": "con",
+      "value": "0b1111",
+      "bits": 4,
+      "lsb": 4
+    },
+    "operand_none": {
+      "build": "con",
+      "value": "0b0000",
+      "bits": 4,
+      "lsb": 0
+    },
+    "operand_imm4": {
+      "build": "imm",
+      "bits": 4,
+      "lsb": 0
+    },
+    "operand_imm4_addr": {
+      "build": "addr",
+      "bits": 4,
+      "lsb": 0
+    }
+  },
+  "instructions": {
+    "NOP": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "op_nop",
+            "operand_none"
+          ]
+        }
+      }
+    },
+    "OUT": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "op_out",
+            "operand_none"
+          ]
+        }
+      }
+    },
+    "HLT": {
+      "forms": {
+        "": {
+          "size": 1,
+          "fields": [
+            "op_hlt",
+            "operand_none"
+          ]
+        }
+      }
+    },
+    "LDA": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_lda",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_lda",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "ADD": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_add",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_add",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "SUB": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_sub",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_sub",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "STA": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_sta",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_sta",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "LDI": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_ldi",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_ldi",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    },
+    "JMP": {
+      "forms": {
+        "imm": {
+          "size": 1,
+          "fields": [
+            "op_jmp",
+            "operand_imm4"
+          ],
+          "from": {
+            "operand_imm4": "op1.num1"
+          }
+        },
+        "local|reloc": {
+          "size": 1,
+          "fields": [
+            "op_jmp",
+            "operand_imm4_addr"
+          ],
+          "from": {
+            "operand_imm4_addr": "op1.num1"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ptasm machine file: a CPU, its ELF settings and its instruction encodings (E2.T2, E2.T3, E2.T4, E6.T8)",
+  "description": "Structure only. Cross-references (a format's fields exist, every field of a chosen format is filled exactly once, ...) are checked when ptasm loads the file.",
+  "type": "object",
+  "required": ["cpuName", "description", "fields", "instructions"],
+  "additionalProperties": false,
+  "properties": {
+    "cpuName": { "type": "string" },
+    "maxOperands": { "type": "integer", "minimum": 2, "maximum": 9 },
+    "description": { "$ref": "#/$defs/description" },
+    "elf": { "$ref": "#/$defs/elf" },
+    "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/field" } },
+    "formats": { "type": "object", "additionalProperties": { "$ref": "#/$defs/layout" } },
+    "modes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/setValues" } },
+    "operandSets": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+    },
+    "modeSets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/family" } },
+    "instructions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/instruction" } }
+  },
+  "$defs": {
+    "value": {
+      "description": "A constant: \"0b0101\", \"0x10\", or a non-negative integer.",
+      "oneOf": [
+        { "type": "string", "pattern": "^(0[bB][01]+|0[xX][0-9a-fA-F]+|[0-9]+)$" },
+        { "type": "integer", "minimum": 0 }
+      ]
+    },
+    "setValues": { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } },
+    "description": {
+      "type": "object",
+      "required": ["regCount", "addressBits", "byteOrder"],
+      "additionalProperties": false,
+      "properties": {
+        "regCount": { "type": "integer", "minimum": 0 },
+        "addressBits": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "byteOrder": { "enum": ["little", "big"] },
+        "relOffset": { "enum": ["before", "after"] }
+      }
+    },
+    "elf": {
+      "type": "object",
+      "required": ["elfClass", "relocations"],
+      "additionalProperties": false,
+      "properties": {
+        "eMachine": { "type": "integer", "minimum": 0 },
+        "elfClass": { "enum": [32, 64] },
+        "relocationFormat": { "enum": ["rela", "rel"] },
+        "relocations": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(addr[0-9]*(:signed)?|pcrel[0-9]*(:call|:jump)?)$" },
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "piece": {
+      "type": "object",
+      "required": ["bits", "lsb"],
+      "additionalProperties": false,
+      "properties": {
+        "bits": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "lsb": { "type": "integer", "minimum": 0 },
+        "valueLsb": { "type": "integer", "minimum": 0, "maximum": 63 }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["build"],
+      "additionalProperties": false,
+      "properties": {
+        "build": { "enum": ["con", "set", "reg", "imm", "pcrel", "addr", "scl"] },
+        "bits": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "lsb": { "type": "integer", "minimum": 0 },
+        "valueLsb": { "type": "integer", "minimum": 0, "maximum": 63 },
+        "pieces": { "type": "array", "items": { "$ref": "#/$defs/piece" }, "minItems": 1 },
+        "value": { "$ref": "#/$defs/value" },
+        "target": { "enum": ["data", "call", "jump"] },
+        "signed": { "type": "boolean" },
+        "round": { "type": "boolean" },
+        "relocation": { "type": "integer", "minimum": 0 }
+      },
+      "oneOf": [
+        { "required": ["pieces"], "not": { "anyOf": [{ "required": ["bits"] }, { "required": ["lsb"] }] } },
+        { "required": ["bits", "lsb"], "not": { "required": ["pieces"] } }
+      ],
+      "if": { "properties": { "build": { "const": "con" } } },
+      "then": { "required": ["value"] },
+      "else": { "not": { "required": ["value"] } }
+    },
+    "layout": {
+      "type": "object",
+      "required": ["size", "fields"],
+      "properties": {
+        "size": { "type": "integer", "minimum": 1 },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "unused": { "type": "array", "items": { "type": "string", "pattern": "^[0-9]+(-[0-9]+)?$" } }
+      }
+    },
+    "formatMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "family": {
+      "type": "object",
+      "required": ["patterns"],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^op[1-9]$": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(reg|num)[12]$" },
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "properties": {
+        "formats": { "$ref": "#/$defs/formatMap" },
+        "set": { "$ref": "#/$defs/setValues" },
+        "patterns": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "modeFrom": { "type": "string", "pattern": "^op[1-9]$" },
+              "set": { "$ref": "#/$defs/setValues" },
+              "formats": { "$ref": "#/$defs/formatMap" }
+            }
+          }
+        }
+      }
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string" },
+        "size": { "type": "integer", "minimum": 1 },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "unused": { "type": "array", "items": { "type": "string", "pattern": "^[0-9]+(-[0-9]+)?$" } },
+        "set": { "$ref": "#/$defs/setValues" },
+        "from": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^op[1-9]\\.(reg|num)[12]$" }
+        },
+        "bytes": { "type": "string", "pattern": "^\\s*(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3})(\\s+(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3}))*\\s*$" }
+      }
+    },
+    "instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modeSet": { "type": "string" },
+        "set": { "$ref": "#/$defs/setValues" },
+        "only": { "type": "array", "items": { "type": "string" } },
+        "remove": { "type": "array", "items": { "type": "string" } },
+        "forms": { "type": "object", "additionalProperties": { "$ref": "#/$defs/override" } }
+      }
+    }
+  }
+}

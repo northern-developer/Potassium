@@ -1,0 +1,105 @@
+{
+  "cpuName": "ELF32",
+  "maxOperands": 2,
+  "description": {
+    "regCount": 16,
+    "addressBits": 16,
+    "byteOrder": "little"
+  },
+  "elf": {
+    "eMachine": 105,
+    "elfClass": 32,
+    "relocations": {
+      "addr16": 5
+    }
+  },
+  "fields": {
+    "mov_imm_op": {
+      "build": "con",
+      "value": "0x403",
+      "bits": 12,
+      "lsb": 4
+    },
+    "dst": {
+      "build": "reg",
+      "bits": 4,
+      "lsb": 0
+    },
+    "imm16": {
+      "build": "imm",
+      "bits": 16,
+      "lsb": 16
+    },
+    "addr16": {
+      "build": "addr",
+      "bits": 16,
+      "lsb": 16
+    },
+    "call_op": {
+      "build": "con",
+      "value": "0x12B0",
+      "bits": 16,
+      "lsb": 0
+    },
+    "ret": {
+      "build": "con",
+      "value": "0x4130",
+      "bits": 16,
+      "lsb": 0
+    }
+  },
+  "instructions": {
+    "MOV": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "mov_imm_op",
+            "dst",
+            "imm16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "imm16": "op2.num1"
+          }
+        },
+        "reg, local|reloc": {
+          "size": 4,
+          "fields": [
+            "mov_imm_op",
+            "dst",
+            "addr16"
+          ],
+          "from": {
+            "dst": "op1.reg1",
+            "addr16": "op2.num1"
+          }
+        }
+      }
+    },
+    "CALL": {
+      "forms": {
+        "imm|local|reloc": {
+          "size": 4,
+          "fields": [
+            "call_op",
+            "addr16"
+          ],
+          "from": {
+            "addr16": "op1.num1"
+          }
+        }
+      }
+    },
+    "RET": {
+      "forms": {
+        "": {
+          "size": 2,
+          "fields": [
+            "ret"
+          ]
+        }
+      }
+    }
+  }
+}
