@@ -38,7 +38,7 @@ a clean-up that decides what goes out.
 
 ## Numbering
 
-**V.R.m.E.T.A** -- Version, Revision, minor,
+Work is numbered **V.R.m.E.T.A** -- Version, Revision, minor,
 Epic, Ticket, Addendum.
 
 - **The levels**: an **Epic** describes a goal;
@@ -55,7 +55,7 @@ Epic, Ticket, Addendum.
   numbers, never in work IDs: a fix in an errata release is still work
   in its V.R.
 - **Shorten within a context.** Most work is in the current V.R, so it
-  is written without it: `E12.6`. While working inside an Epic, just
+  is written without it: `E12.T6`. While working inside an Epic, just
   the Ticket: `T6` in E12.
 - **Files**: `plan/<V.R>/`, side by
   side for every V.R, past or future. `plan/0.1/README.md` describes all
@@ -67,8 +67,8 @@ Epic, Ticket, Addendum.
   aren't, and the level letter is written where a number could be read
   two ways (`E12.T6`, `E12.A2`, `E12.T6.A1`).
 - **Issues and errata**: issues go in a file named
-  for its V.R and m like the READMEs (`plan/0.1/ISSUES.md`,
-  `ISSUES-02.md`), with a running number; a Ticket for a non-trivial
+  for its V.R and m like the READMEs (kept with the project, not yet
+  published), with a running number; a Ticket for a non-trivial
   issue cites it. A fix lives with what it fixes (the Epic or Ticket in
   its own V.R), cross-referencing the current V.R's E.T it was ported
   to or backported from. A `README-0m.md` gives the prior state,
@@ -81,8 +81,6 @@ Epic, Ticket, Addendum.
 - **Ports**: both V.Rs mark a port or backport. Unless it is a big task,
   one end is the full Ticket (or Epic) and the other just an Addendum
   that cross-references it.
-- Not applied yet: today's Tickets keep their numbers until the new
-  order (`ORDER.md`) and its content are agreed.
 
 ## Naming
 

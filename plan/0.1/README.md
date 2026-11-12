@@ -13,16 +13,16 @@ log of issues are kept with the project and published later.
 | # | Epic / Ticket | Status |
 |---|---|---|
 | **E1** | [Foundation -- a table-driven assembler](E01-foundation.md) | Completed (0.1.1) |
-| **E2** | [The cpu.json format](E02-cpu-json-format.md) | Completed (0.1.1) |
+| **E2** | [The cpu.json format](E02-cpu-json-format.md) | Completed (0.1.2); A1-A7 in 0.1.1, A8 in 0.1.2 |
 | **E3** | [Source language -- Intel and AT&T](E03-source-language.md) | Completed (0.1.1) |
 | **E4** | [Output formats and the BOM](E04-output-formats.md) | Completed (0.1.1) |
 | **E5** | [Safety -- no silent errors](E05-safety.md) | Completed (0.1.1) |
 | **E6** | [Structure, names and tests](E06-structure.md) | Completed (0.1.1) |
 | **E7** | [RISC targets, checked against GCC](E07-risc-targets.md) | Completed (0.1.1) |
-| **E8** | [Release 0.1.1](E08-release.md) | Completed (0.1.1), 2026-11-10, but A4 (the docs pass), moved to 0.1.2. |
+| **E8** | [Release 0.1.1](E08-release.md) | Completed (0.1.2); 0.1.1 shipped without A4 (the docs pass) and A8-A9, all completed for 0.1.2. |
 <!-- plan:end -->
 
 ## Releases
 
 - **0.1.1** (2026-11-10): E1-E8, but E8.A4 (the docs pass), moved to 0.1.2.
-- **0.1.2**: planned -- E8.A4.
+- **0.1.2**: in progress -- E2.A8, E8.A4 and E8.A8-A9; from 0.2, E4.A3 (installing) and E8 (fuzzing) (`README-02.md`).

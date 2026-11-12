@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "AMD64 (minimal, 64-bit: MOV/ADD/AND/CMP/TEST r64, PUSH/POP r64, INC [rip+disp32], JE/JNE rel8/rel32, CALL rel32, LEA r64-[rip+disp32], SYSCALL, RET)",
   "description": {
     "regCount": 8,

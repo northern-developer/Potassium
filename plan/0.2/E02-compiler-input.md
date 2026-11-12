@@ -37,3 +37,15 @@ Whether equivalent Intel and AT&T operands always map to the same mode; fixed if
 **Status:** Assigned
 
 `R_X86_64_GOTPCREL`: a PIE can't reach a library variable through `PC32` or `PLT32`.
+
+### A6: `--defsym NAME=value`
+
+**Status:** Assigned (2026-11-12)
+
+Define a constant from the command line, as GAS's `--defsym` and NASM's `-D` do.
+
+### A7: `.INCLUDE`
+
+**Status:** Assigned (2026-11-12)
+
+Read another source file in place; diagnostics name the included file and line.

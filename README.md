@@ -38,13 +38,28 @@ ptasm -I -m MSP430                            # what the target supports
 ptasm --version
 ```
 
+The binary is `build/test/ptasm`; to install it, with the machine files:
+
+```sh
+cmake --preset default && cmake --build --preset default
+cmake --install build/default --component ptasm --prefix ~/.local
+```
+
+A bare `-m` name is looked up in `$PTASM_MACHINES`, then the installed
+`share/ptasm/machines`, then the source tree's `machines/`.
+
 ## Documentation
 
+- `docs/DESIGN.md` -- what ptasm is for, and the model it's built on.
+  Start here.
 - `docs/SPEC.md` -- the command line, source language, directives,
   the cpu.json format, output formats and diagnostics.
 - `docs/USERS_GUIDE.md` -- writing a cpu.json for your own CPU.
 - `docs/cpus/` -- notes on each included target.
 - `docs/GETTING_STARTED.md` -- building, testing and contributing.
+- `docs/ARCHITECTURE.md` -- how the code is organized.
+- `ROADMAP.md` and `plan/` -- where ptasm is going, release by release.
+- `CHANGELOG.md` -- what changed in each release; `CONTRIBUTING.md` -- how to contribute.
 
 ## License
 

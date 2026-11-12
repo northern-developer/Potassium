@@ -24,7 +24,7 @@ ptasm -I [-m machine]
 | Option | Meaning | Default |
 |---|---|---|
 | `source` | Source file to assemble. | required (except `-I`) |
-| `-m`, `--machine`, `--arch` | cpu.json: a bare name resolves to `machines/<name>.json` (`.json` appended if missing); anything containing `/`, or absolute, is used as a path. | `machines/my-cpu.json` |
+| `-m`, `--machine`, `--arch` | cpu.json: a bare name is looked up as `<name>.json` (`.json` appended if missing) in `$PTASM_MACHINES`, then the installed `share/ptasm/machines` beside the binary's `bin/`, then the source tree's `machines/`; the first folder that has it wins. Anything containing `/`, or absolute, is used as a path. | `my-cpu` |
 | `-f`, `--format` | `bin`, `hex`, `srec` or `elf` (§8). | `bin` |
 | `-o`, `--output` | Output file. | the source path with its extension replaced: `.bin`, `.hex`, `.srec`, or `.o` for `elf` |
 | `-l`, `--list [path]` | Also write a listing (§8.5) to `path`, or to stdout if no path is given. | off |
@@ -260,14 +260,13 @@ sets, mode sets, instructions). `machines/cpu_schema.json` is its JSON
 Schema, checked against every file in `machines/` by the test suite; ptasm
 itself checks everything the schema can't (every cross-reference, and
 that every instruction form fills every bit of its layout exactly
-once). Unknown keys are errors. The design is E2.T2; the
-`description` and `elf` blocks E2.T4 and E6.T8 (which split the
-original `machine` block in two); the field kinds E2.T3.
+once). Unknown keys are errors.
 
 ### 6.1 Top level
 
 | Key | Meaning |
 |---|---|
+| `$schema` | The schema an editor checks the file against (`./cpu_schema.json`, or a URL). Optional; a string. |
 | `cpuName` | Display name. Shown everywhere as `<cpuName> eMachine:<N>` (§6.2, `elf.eMachine`; 0 without an `elf` block). |
 | `maxOperands` | Most operands an instruction may be written with, 2-9. Optional, default 3. |
 | `description` | The CPU itself (§6.2). Required. |
@@ -293,7 +292,7 @@ original `machine` block in two); the field kinds E2.T3.
 | Key | Meaning |
 |---|---|
 | `regCount` | Registers `R0` to `R<regCount-1>` exist; a higher register number is an error. Required (0 for a CPU with no `R#` registers). |
-| `addressBits` | Width of an address, 1-64. Required. Every byte must lie in `0 .. 2^addressBits - 1` (a zero-size line, e.g. a label, may be at `2^addressBits`), else an error on the first line in each section outside it. Also sets the listing's address width (E4.T4) and `.ADDR`'s (E3.T3). |
+| `addressBits` | Width of an address, 1-64. Required. Every byte must lie in `0 .. 2^addressBits - 1` (a zero-size line, e.g. a label, may be at `2^addressBits`), else an error on the first line in each section outside it. Also sets the listing's address width and `.ADDR`'s. |
 | `byteOrder` | `"little"` or `"big"`. Required. The order of bytes in `.WORD`/`.LONG`/`.QUAD` and in an instruction built from fields (§7.1), and of every field of an ELF object (§8.4). |
 | `relOffset` | Where a `pcrel` distance counts from: `"before"`, the instruction's own address (OpenRISC, RISC-V), or `"after"`, the next instruction's (x86, MIPS). Required when any field is `pcrel`; otherwise ignored. |
 `elf`, optional; with it, `elfClass` and `relocations` are required:
@@ -568,7 +567,7 @@ or, with `elf.relocationFormat: "rel"`, `SHT_REL` (`.rel<name>`).
 
 ### 8.5 Listing (`-l`)
 
-MASM-style (E4.T4): every source line in order, then two tables.
+MASM-style: every source line in order, then two tables.
 
 - **Columns:** address, bytes, source. Addresses have no `0x` and use the
   target's address width (`description.addressBits`: 4 hex digits for 16
@@ -659,35 +658,9 @@ Always warnings (output is written):
 
 ## 10. Internals
 
-The source is in folders by role, with `include/ptasm/` mirroring
-`src/`: `cli/` (`main`, `Cli`, `Formats`), `cpu/` (`Cpu`, `Machine`,
-`InstructionSet`, `Form`), `assembler/` (the parser, the passes, `Bom`
-and `Diagnostics`), `writers/` (every output format), and `grammar/`
-(the ANTLR grammar and its generated parser).
-
-| Piece | Role |
-|---|---|
-| `Cli` | Reads the command line into resolved `Options` (paths, syntax, format); ends the run itself for `--help` and bad flags. Nothing past `main` sees `Options`. |
-| `outputFormats()` (`Formats.h`) | The `-f` table: each format's name, default extension, binary mode and writer. `-f`'s accepted values and `--help` come from it. |
-| `src/grammar/ptasm.g4` → `src/grammar/generated/` | ANTLR4 grammar and its committed generated parser (`regen-parser` target). |
-| `AsmParser` | Walks the parse tree (either grammar) into a list of statements: each line that becomes bytes a `Statement`, each label and directive its own kind (`SourceStatement.h`), expressions left unevaluated. |
-| `Statement`, `Form` | A line that becomes bytes: its kind (`Instruction` with its mnemonic, `Form` and operands; `Data` slots; `Reserve` zero bytes; `Bytes` as written) under a shared address, size, bytes and link needs. A `Form` is one `Mode` (bracket depth and `Word`s) per operand, the value an encoding is looked up by; its text appears only in cpu.json and messages. |
-| `Cpu`, `Machine`, `loadCpu` | The machine file in two halves: `Cpu` (the instruction set and `maxOperands`, passed by const reference) and `Machine` (`cpuName`, the `description` block as `Description` and the `elf` block as an optional `Elf`, moved into the `Bom`, its owner). `loadCpu` reads and checks both. |
-| `Assembler` | `assemble(sourceText)`: parses (ANTLR and `AsmParser`), runs the statements in order, then the passes of §7.2 over its `SymbolTable`, `Layout`, `OperandClassifier` and `Encoder`, reading the `Machine` from the caller's `Bom`; `getBom()` fills that `Bom` in. |
-| `SymbolTable` | Labels, `.EQU`/`.SET` constants, `.GLOBAL`/`.EXTERN` names, case folding (Intel), as-written spellings, and expression evaluation; the `Bom` gets a copy. |
-| `Layout` | The sections, the current address, `.ORG` and sections, and placing named sections after the absolute content (§5). |
-| `OperandClassifier` | Each operand's mode and number class (`imm`/`local`/`reloc`), the form a line is looked up by (§6.4), and resolving operands to one number and a relocation symbol. |
-| `InstructionSet` | Loads and checks a cpu.json's fields, formats, modes, operand sets, mode sets and instructions; builds every instruction form (§6). |
-| `Encoder` | Form lookup and field encoding for one line, and the relocations a field needs (§6, §7). |
-| `Diagnostics` | Counts and prints every warning and error (§9). |
-| `Bom` | The build: its `Machine`, sections, lines, relocations and symbol tables; the only thing exporters see. See `docs/BOM.md`. |
-| `ObjectWriter` and `BinWriter`, `RecordWriter` (`IntelHexWriter`, `SRecordWriter`), `ListingWriter`, `ElfWriter` | One per output format, each checking (`checkMachine` before assembling, `check` after: what the format can't hold, §9) and writing a `Bom`; given only the values it needs (`WriterSettings`: `--pad` for bin). |
-
-Tests: `scripts/verify.sh` builds and runs everything under the `test`
-and `asan` presets, checks golden files and clang-tidy; `--release`
-adds the release-level tests: an `-O2` build, every example under
-Valgrind, determinism and ELF lint, coverage and static analysis (see
-`docs/GETTING_STARTED.md`).
+How ptasm is built -- the pipeline, the data model, and where each kind
+of change goes -- is in `docs/ARCHITECTURE.md`; the build every writer
+reads is in `docs/BOM.md`. Testing is in `docs/GETTING_STARTED.md`.
 
 ## 11. Known limitations
 

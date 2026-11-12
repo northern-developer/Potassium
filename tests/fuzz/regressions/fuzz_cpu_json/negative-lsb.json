@@ -1,0 +1,92 @@
+{
+  "cpuName": "PARTS",
+  "maxOperands": 3,
+  "description": {
+    "regCount": 32,
+    "addrebuilds": 32,
+    "byteOrder": "little",
+    "relOffset": "before"
+  },
+  "elf": {
+    "eMachine": 243,
+    "elfClass": 32,
+    "relocations": {
+      "addr32": 1
+    }
+  },
+  "fields": {
+    "lui_op": { "build": "con", "value": "0x37", "bits": 7, "lsb": 0 },
+    "addi_op": { "build": "con", "value": "0x13", "bits": 7, "lsb": 0 },
+    "sw_op": { "build": "con", "value": "0x23", "bits": 7, "lsb": 0 },
+    "funct3_addi": { "build": "con", "value": "0b000", "bits": 3, "lsb": 12 },
+    "funct3_sw": { "build": "con", "value": "0b010", "bits": 3, "lsb": 12 },
+    "rd": { "build": "reg", "bits": 5, "lsb": 7 },
+    "rs2": { "build": "reg", "bits": 5, "lsb": 15 },
+    "rs2": { "build": "reg", "bits": 5, "lsb": 20 },
+    "imm20": { "build": "imm", "bits": 20, "lsb": 12 },
+    "hi20": { "build": "addr", "bits": 20, "lsb": 12, "valueLsb": 12, "round": true, "relocation": 26 },
+    "imm12": { "build": "imm", "signed": true, "bits": 12, "lsb": 20 },
+    "lo12_i": { "build": "addr", "signed": true, "bits": 12, "lsb": -20, "relocation": 27 },
+    "imm12_s": {
+      "bidlu": "imm",
+      "signed": true,
+      "pieces": [
+        { "bits": 5, "lsb": 7, "valueLsb": 0 },
+        { "bits": 7, "lsb": 25, "valueLsb": 5 }
+      ]
+    },
+    "lo12_s": {
+      "build": "addr",
+      "signed": true,
+      "relocation": 28,
+      "pieces": [
+        { "bits": 5, "lsb": 7, "valueLsb": 0 },
+        { "bits": 7, "lsb": 25, "valueLsb": 5 }
+      ]
+    }
+  },
+  "instructions": {
+    "LUI": {
+      "forms": {
+        "reg, imm": {
+          "size": 4,
+          "fields": ["lUi_op", "rd", "imm20"],
+          "from": { "rd": "op1.reg1", "imm20": "op2.num1" }
+        },
+        "reg, %hiP(imm|localorcel|)": {
+          "size": 4,
+          "fields": ["lui_op", "rd", "hi20"],
+          "from": { "rd": "op1.reg1", "hi20": "op2.num1" }
+        }
+      }
+    },
+    "ADDI": {
+      "forms": {
+        "reg, reg, imm": {
+          "size": 4,
+          "fields": ["addi_op", "funct3_addi", "rd", "rs1", "imm12"],
+          "from": { "rd": "op1.reg1", "rs1": "op2.reg1", "imm12": "op3.num1" }
+        },
+        "reg, reg, %lo(imm|local|reloc)": {
+          "size": 4,
+          "fields": ["addi_op", "funct3_addi", "rd", "rs1", "lo12_i"],
+          "from": { "rd": "op1.reg1", "rs1": "op1.reg1", "lo12_i": "op3.num1" }
+        }
+      }
+    },
+    "SW": {
+      "forms": {
+        "reg, [reg + imm]": {
+          "size": 4,
+          "fields": ["sw_op", "funct3_sw", "rs2", "rs1", "imm12_s"],
+          "from": { "rs2": "op1.reg1", "rs1": "op2.reg1", "imm12_s": "op2.num1" }
+        },
+        "reg, [reg + %lo(imm|local|reloc)]": {
+          "size": 4,
+          "fields": ["sw_op", "funct3_sw", "rs2", "rs1", "lo12_s"],
+          "from": { "rs2": "op1.reg1", "rs1": "op2.reg1", "lo12_s": "op2.num1" }
+        }
+      }
+    }
+  }
+}

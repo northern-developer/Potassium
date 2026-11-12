@@ -7,8 +7,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <cstdlib>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <variant>
 #include <vector>
 
@@ -42,10 +44,28 @@ Syntax resolveSyntax(const std::string& syntaxFlag, const std::string& sourcePat
     return std::filesystem::path(sourcePath).extension() == ".s" ? Syntax::att : Syntax::intel;
 }
 
-// -m's value is either a bare profile name (resolved to machines/<name>.json,
-// appending .json if not already present) or a real path (anything
-// containing a path separator, or already absolute) used as-is. Default,
-// when -m isn't given at all, is machines/my-cpu.json.
+// The folders a bare -m name is looked up in, in order: $PTASM_MACHINES;
+// the installed share/ptasm/machines beside the running binary's bin/;
+// the source tree's machines/, for a build in the checkout.
+std::vector<std::filesystem::path> machineFolders() {
+    std::vector<std::filesystem::path> folders;
+    if (const char* fromEnvironment = std::getenv("PTASM_MACHINES"); // NOLINT(concurrency-mt-unsafe) -- read once, single-threaded
+        fromEnvironment != nullptr && *fromEnvironment != '\0') {
+        folders.emplace_back(fromEnvironment);
+    }
+    std::error_code error;
+    std::filesystem::path const binary = std::filesystem::read_symlink("/proc/self/exe", error);
+    if (!error) {
+        folders.push_back(binary.parent_path().parent_path() / "share" / "ptasm" / "machines");
+    }
+    folders.emplace_back(std::string(PTASM_SOURCE_DIR) + "/machines");
+    return folders;
+}
+
+// -m's value is either a bare profile name (looked up as <name>.json in
+// machineFolders(), appending .json if not already present) or a real path
+// (anything containing a path separator, or already absolute) used as-is.
+// Default, when -m isn't given at all, is my-cpu.json.
 std::string resolveCpuPath(const std::string& machine) {
     static const std::string kDefaultMachine = "my-cpu.json";
     const std::string& value = machine.empty() ? kDefaultMachine : machine;
@@ -56,7 +76,16 @@ std::string resolveCpuPath(const std::string& machine) {
     if (!name.ends_with(".json")) {
         name += ".json";
     }
-    return std::string(PTASM_SOURCE_DIR) + "/machines/" + name;
+    std::vector<std::filesystem::path> const folders = machineFolders();
+    std::error_code error;
+    for (const std::filesystem::path& folder : folders) {
+        if (std::filesystem::is_regular_file(folder / name, error)) {
+            return (folder / name).string();
+        }
+    }
+    // Not found anywhere: name it in the last folder, the source tree's, so
+    // the error says what was looked for.
+    return (folders.back() / name).string();
 }
 
 // How the cpu.json is named in messages: a bare -m name also shows what
@@ -102,8 +131,8 @@ void addOptions(CLI::App& app, RawOptions& raw, const CLI::Option*& listOption) 
     raw.format = defaultFormat;
     app.add_option("source", raw.sourcePath, "Path to the .asm source file");
     app.add_option("-m,--machine,--arch", raw.machine,
-                   "Target core architecture profile: a bare name (resolved to machines/<name>.json) "
-                   "or a real path. Default: machines/my-cpu.json");
+                   "The machine file: a bare name, looked up as <name>.json in $PTASM_MACHINES, the installed "
+                   "share/ptasm/machines, then the source tree's machines/; or a path. Default: my-cpu");
     app.add_option("-f,--format", raw.format, "Output format: " + formatList() + ". Default: " + defaultFormat)
         ->check(CLI::IsMember(formatNames()));
     app.add_option("-o,--output", raw.output,

@@ -19,3 +19,5 @@ compile_commands.json
 docs/index.html
 # The private CPU overlay (a symlink to a folder outside the project).
 /prototype
+# The fuzzing corpus: rebuilt and refreshed by scripts/fuzz.sh, never committed.
+/tests/fuzz/corpus/

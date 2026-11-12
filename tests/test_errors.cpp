@@ -2,10 +2,13 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/assembler/Syntax.h"
+#include "ptasm/cpu/Cpu.h"
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -221,3 +224,39 @@ TEST_CASE(".SET errors: use before the first .SET, and clashes with labels and .
     assembleText(".ORG 0\nhere .SET 1\nhere: AAA\n", cpu, diagnosticsText);
     CHECK(diagnosticsText == "test.asm:3: error: 'here' is already defined\n");
 }
+
+TEST_CASE("Source that isn't valid UTF-8 is a syntax error at its line and column (issue 37)") {
+    const std::string base = PTASM_SOURCE_DIR;
+    const std::string cpu = base + "/machines/AMD64.json";
+    std::string diagnosticsText;
+    assembleText(readFile(base + "/tests/fuzz/regressions/fuzz_source/invalid-utf8.asm"), cpu, diagnosticsText);
+    CHECK(diagnosticsText == "test.asm:1:16: error: byte 0xE9 isn't valid UTF-8; source is read as UTF-8\n");
+    // Columns count characters: the 2-byte \u00e9 before the bad byte is one.
+    assembleText("RET\n; caf\xc3\xa9 \xc0\x80\n", cpu, diagnosticsText);
+    CHECK(diagnosticsText == "test.asm:2:8: error: byte 0xC0 isn't valid UTF-8; source is read as UTF-8\n");
+    assembleText("; surrogate \xed\xa0\x80\n", cpu, diagnosticsText);
+    CHECK(diagnosticsText == "test.asm:1:13: error: byte 0xED isn't valid UTF-8; source is read as UTF-8\n");
+    assembleText("RET ; caf\xc3\xa9, \xe2\x82\xac, \xf0\x9f\x98\x80\n", cpu, diagnosticsText);
+    CHECK(diagnosticsText.empty()); // well-formed 2-, 3- and 4-byte characters are fine
+}
+
+TEST_CASE("A cpu.json number too large for a double is invalid JSON, named by its file (issue 38)") {
+    const std::string base = PTASM_SOURCE_DIR;
+    std::ostringstream text;
+    Diagnostics diagnostics(text);
+    diagnostics.setConfigName("number-overflow.json");
+    CHECK_FALSE(loadCpuFile(base + "/tests/fuzz/regressions/fuzz_cpu_json/number-overflow.json", diagnostics).has_value());
+    diagnostics.flush();
+    CHECK(text.str().starts_with("number-overflow.json: error: invalid JSON: "));
+    CHECK(text.str().find("number overflow") != std::string::npos);
+}
+
+TEST_CASE("A machine file may name its schema with \"$schema\", a string (E2.A8)") {
+    nlohmann::json cpu = elf32Cpu();
+    cpu["$schema"] = "./cpu_schema.json";
+    CHECK(loadProblems(cpu).empty());
+    cpu["$schema"] = 1;
+    CHECK(loadProblems(cpu) ==
+          std::vector<std::string>{R"("$schema" must be a string: the path or URL of the machine file schema)"});
+}
+

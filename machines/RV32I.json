@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "RV32I",
   "maxOperands": 3,
   "description": {

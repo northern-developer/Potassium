@@ -1,8 +1,8 @@
 # ptasm 0.2
 
 **Status:** Assigned -- planned after 0.1.1; its Epics may move into
-0.1.m releases (each an m holds a subset of the next V.R's Epics) or
-into later V.Rs.
+0.1.m releases (an m holds a subset of the next V.R's Epics) or into
+later V.Rs.
 
 The next release: CPU-specific register names, real compiler input,
 more of what the format can encode, an installable ptasm, and then the
@@ -18,5 +18,7 @@ tools that share the machine file -- QEMU and LLVM.
 | **E5** | [The Rosetta Stone](E05-rosetta-stone.md) | Assigned |
 | **E6** | [QEMU](E06-qemu.md) | Assigned |
 | **E7** | [LLVM](E07-llvm.md) | Assigned |
-| **E8** | [Fuzzing](E08-fuzzing.md) | Assigned -- postponed from 0.1.1. |
+| **E8** | [Fuzzing](E08-fuzzing.md) | In progress -- T1 and A1-A2 completed for 0.1.2; A3 later. |
+| **E9** | [Test depth](E09-test-depth.md) | Assigned (2026-11-12) |
+| **E10** | [Documentation](E10-documentation.md) | Assigned (2026-11-12) |
 <!-- plan:end -->

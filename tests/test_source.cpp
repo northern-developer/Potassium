@@ -59,7 +59,7 @@ TEST_CASE(".EQU does not allow redefinition -- errors instead of silently keepin
     CHECK(diagnosticsText == "test.asm:2: error: 'VAR' is already defined; .EQU does not allow redefinition\n");
 }
 
-TEST_CASE("Non-ASCII input: fine in comments and strings, a syntax error elsewhere, an exception if not UTF-8") {
+TEST_CASE("Non-ASCII input: fine in comments and strings, a syntax error elsewhere and if not UTF-8") {
     const std::string base = PTASM_SOURCE_DIR;
     std::string diagnosticsText;
     // TESTCPU-0.asm itself holds a UTF-8 comment and string; here the string's bytes are checked.
@@ -70,8 +70,9 @@ TEST_CASE("Non-ASCII input: fine in comments and strings, a syntax error elsewhe
     // A character outside the source language is reported at its line and column.
     assembleText(".ORG 0\nAAB \xC3\xA9\n", base + "/machines/TESTCPU-0.json", diagnosticsText);
     CHECK(diagnosticsText.find("test.asm:2:5: error: token recognition error at: '\xC3\xA9'") != std::string::npos);
-    // Bytes that aren't UTF-8 are rejected before any line is known.
-    CHECK_THROWS(assembleText(".ORG 0\nAAA\n\xFF\xFE\n", base + "/machines/TESTCPU-0.json", diagnosticsText));
+    // Bytes that aren't UTF-8 are a syntax error at the first one (issue 37).
+    assembleText(".ORG 0\nAAA\n\xFF\xFE\n", base + "/machines/TESTCPU-0.json", diagnosticsText);
+    CHECK(diagnosticsText == "test.asm:3:1: error: byte 0xFF isn't valid UTF-8; source is read as UTF-8\n");
     // A cpu.json may name its CPU with non-ASCII text, which diagnostics show as is.
     std::ifstream cpuConfigFile(base + "/machines/TESTCPU-0.json");
     nlohmann::json cpuConfigJson;

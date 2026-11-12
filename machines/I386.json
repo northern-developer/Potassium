@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "i386 (minimal, for ELFCLASS32 with REL: MOV, ADD/SUB/AND/CMP r32-imm32, PUSH/POP r32, INC [abs32], JNE rel8/rel32, CALL rel32, RET)",
   "maxOperands": 2,
   "description": {

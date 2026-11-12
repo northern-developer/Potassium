@@ -42,7 +42,7 @@ AAD_WIDTH .EQU 0x0005 # defines a reusable named constant
 
 AAD $AAD_WIDTH # same AAD (mode 3, immediate) rule as above, operand is the
 
-BIG64 .EQU 0xFFFFFFFFFFFFFFFF # exercises the full 64-bit width end-to-end (see plan/0.1/ISSUES.md's
+BIG64 .EQU 0xFFFFFFFFFFFFFFFF # exercises the full 64-bit width end-to-end
 
 MyBytes: .BYTE 0x01, 0x02, 0x03 # a literal byte list
 MyAscii: .ASCII "done\n" # a raw string, no auto-terminator

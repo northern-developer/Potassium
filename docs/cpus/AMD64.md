@@ -1,6 +1,6 @@
 # AMD64 target notes
 
-This document covers the **minimal AMD64 target** `machines/AMD64.json` implements: a small set of 64-bit instructions (below), grown from `MOV` and `SYSCALL`, which `ROADMAP.md`'s E1.T2 chose as the smallest slice of real x86-64 that's still ELF-testable. It is real, externally-specified hardware: this document is a scoped excerpt of that spec, not a from-scratch invention.
+`machines/AMD64.json` is a **minimal AMD64 target**: the small set of 64-bit instructions below, enough to assemble a real program, link it into a PIE and run it (0.1:E1.T2). AMD64 is real, externally specified hardware, so this document is a scoped excerpt of its spec.
 
 ---
 

@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm)",
   "description": {
     "regCount": 8,

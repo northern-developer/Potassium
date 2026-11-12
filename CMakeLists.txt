@@ -7,7 +7,7 @@ include(${cpp-library_SOURCE_DIR}/cpp-library.cmake)
 
 cpp_library_enable_dependency_tracking()
 # The release version, set here; ptasm --version reports it.
-set(PTASM_VERSION 0.1.1)
+set(PTASM_VERSION 0.1.2)
 project(ptasm-core VERSION ${PTASM_VERSION} LANGUAGES CXX)
 # cpp-library otherwise takes its version from the latest git tag.
 set(CPP_LIBRARY_VERSION ${PTASM_VERSION})
@@ -47,24 +47,27 @@ CPMAddPackage(
     GITHUB_REPOSITORY antlr/antlr4
     GIT_TAG 4.13.2
     SOURCE_SUBDIR runtime/Cpp
-    # ANTLR's own runtime tests (and the googletest they fetch) aren't ptasm's.
-    OPTIONS "CMAKE_POLICY_VERSION_MINIMUM 3.5" "ANTLR_BUILD_CPP_TESTS OFF"
+    # ANTLR's own runtime tests (and the googletest they fetch) aren't ptasm's;
+    # ptasm links the static runtime only.
+    OPTIONS "CMAKE_POLICY_VERSION_MINIMUM 3.5" "ANTLR_BUILD_CPP_TESTS OFF" "ANTLR_BUILD_SHARED OFF"
 )
 
 target_link_libraries(ptasm-core PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(ptasm-core PRIVATE CLI11::CLI11)
-# Cli.cpp resolves a bare -m name to <source>/machines/<name>.json.
+# Cli.cpp's last folder for a bare -m name: <source>/machines/.
 target_compile_definitions(ptasm-core PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
                                               PTASM_VERSION="${PTASM_VERSION}")
-target_compile_definitions(test_cli PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-                                            PTASM_VERSION="${PTASM_VERSION}")
-# The pipeline tests, one per area, all through tests/harness.h.
-foreach(pipelineTest test_examples test_source test_encoding test_elf test_errors)
-    target_link_libraries(${pipelineTest} PRIVATE nlohmann_json::nlohmann_json)
-    target_compile_definitions(${pipelineTest} PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-endforeach()
-target_link_libraries(test_instruction_set PRIVATE nlohmann_json::nlohmann_json)
-target_compile_definitions(test_instruction_set PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+if(BUILD_TESTING)
+    target_compile_definitions(test_cli PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+                                                PTASM_VERSION="${PTASM_VERSION}")
+    # The pipeline tests, one per area, all through tests/harness.h.
+    foreach(pipelineTest test_examples test_source test_encoding test_elf test_errors)
+        target_link_libraries(${pipelineTest} PRIVATE nlohmann_json::nlohmann_json)
+        target_compile_definitions(${pipelineTest} PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    endforeach()
+    target_link_libraries(test_instruction_set PRIVATE nlohmann_json::nlohmann_json)
+    target_compile_definitions(test_instruction_set PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
 
 # --- CLI and repo checks (ctest). Each needs tools that may be missing; it is
 # registered only when they're all found. ---
@@ -253,6 +256,33 @@ if(BUILD_TESTING)
         set_tests_properties(example-checks-all PROPERTIES LABELS release TIMEOUT 1800)
     endif()
 
+    # The libFuzzer harnesses (tests/fuzz/), built by the fuzz preset and
+    # run by scripts/fuzz.sh: not ctests.
+    option(PTASM_FUZZ "Build the libFuzzer harnesses in tests/fuzz/" OFF)
+    if(PTASM_FUZZ)
+        foreach(harness IN ITEMS fuzz_source fuzz_cpu_json)
+            add_executable(${harness} tests/fuzz/${harness}.cpp)
+            target_link_libraries(${harness} PRIVATE ptasm-core nlohmann_json::nlohmann_json)
+            target_compile_definitions(${harness} PRIVATE PTASM_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+            target_compile_options(${harness} PRIVATE -fsanitize=fuzzer)
+            target_link_options(${harness} PRIVATE -fsanitize=fuzzer)
+        endforeach()
+        # Each input of the committed corpus, the regressions and the seeds,
+        # run once (-runs=0): an old finding coming back fails.
+        set(PTASM_FUZZ_SEEDS_fuzz_source examples tests/fixtures)
+        set(PTASM_FUZZ_SEEDS_fuzz_cpu_json machines tests/fixtures)
+        foreach(harness IN ITEMS fuzz_source fuzz_cpu_json)
+            # The corpus is git-ignored and may not exist yet (scripts/fuzz.sh builds it).
+            file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${harness}")
+            set(inputs "")
+            foreach(folder IN ITEMS tests/fuzz/corpus/${harness} tests/fuzz/regressions/${harness} ${PTASM_FUZZ_SEEDS_${harness}})
+                list(APPEND inputs "${CMAKE_CURRENT_SOURCE_DIR}/${folder}")
+            endforeach()
+            add_test(NAME fuzz-replay-${harness} COMMAND ${harness} -runs=0 ${inputs})
+            set_tests_properties(fuzz-replay-${harness} PROPERTIES LABELS fuzz)
+        endforeach()
+    endif()
+
     # A private overlay of CPUs that aren't part of ptasm: a git-ignored
     # folder (usually a symlink) with machines/, examples/ and golden/. Each
     # of its golden files is a test, as tests/golden's are for the public
@@ -370,6 +400,24 @@ endif()
 
 add_executable(ptasm src/cli/main.cpp)
 target_link_libraries(ptasm PRIVATE ptasm::core nlohmann_json::nlohmann_json)
+
+# `cmake --install <build> --component ptasm`: the assembler, the machine
+# files a bare -m name finds (share/ptasm/machines, beside bin/), and the
+# licenses. (Without --component, the fetched dependencies' own install
+# rules add their headers and libraries, which ptasm doesn't need.)
+include(GNUInstallDirs)
+install(TARGETS ptasm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ptasm)
+install(DIRECTORY machines/ DESTINATION ${CMAKE_INSTALL_DATADIR}/ptasm/machines COMPONENT ptasm
+        FILES_MATCHING PATTERN "*.json")
+install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/ptasm COMPONENT ptasm)
+if(BUILD_TESTING)
+    add_test(NAME install-finds-machines
+             COMMAND ${CMAKE_COMMAND}
+                     -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/SAP-1.asm
+                     -DWORK=${CMAKE_CURRENT_BINARY_DIR}/install-check
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/install_check.cmake)
+endif()
 
 # --- run-my-source: fast-iteration build mode. Builds only the `ptasm`
 # executable (no doctest suites, no ANTLR regen) and runs it against

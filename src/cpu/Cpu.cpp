@@ -170,14 +170,19 @@ void readDescription(const nlohmann::json& json, Description& dest, Problems& pr
 }
 
 // The top-level keys: cpuName and maxOperands; the rest are read by
-// readDescription, readElf and InstructionSet::load.
+// readDescription, readElf and InstructionSet::load. "$schema" points an
+// editor at machines/cpu_schema.json; ptasm only checks it's a string.
 void readHeader(const nlohmann::json& json, Machine& machine, int& maxOperands, Problems& problems) {
-    static const std::set<std::string> kKnownKeys = {"cpuName", "maxOperands", "description", "elf",     "fields",
-                                                     "formats", "modes",       "operandSets", "modeSets", "instructions"};
+    static const std::set<std::string> kKnownKeys = {"$schema", "cpuName",     "maxOperands", "description",
+                                                     "elf",     "fields",      "formats",     "modes",
+                                                     "operandSets", "modeSets", "instructions"};
     for (const auto& [key, value] : json.items()) {
         if (!kKnownKeys.contains(key)) {
             problems.push_back(R"(unknown key ")" + key + R"(")");
         }
+    }
+    if (json.contains("$schema") && !json.at("$schema").is_string()) {
+        problems.emplace_back(R"("$schema" must be a string: the path or URL of the machine file schema)");
     }
     if (json.contains("cpuName") && json.at("cpuName").is_string()) {
         machine.cpuName = json.at("cpuName").get<std::string>();
@@ -249,7 +254,7 @@ std::optional<LoadedCpu> loadCpuFile(const std::string& path, Diagnostics& diagn
     nlohmann::json json;
     try {
         file >> json;
-    } catch (const nlohmann::json::parse_error& e) {
+    } catch (const nlohmann::json::exception& e) { // a parse error, or a number out of range
         diagnostics.configFatal(std::string("invalid JSON: ") + e.what());
         return std::nullopt;
     }

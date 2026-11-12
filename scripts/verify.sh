@@ -15,8 +15,9 @@
 #                           an -O2 build's tests with every example under
 #                           Valgrind, determinism and ELF lint; a coverage
 #                           report (build/coverage/report.txt, no gate);
-#                           and clang's static analyzer on src/. Implies
-#                           --tidy.
+#                           clang's static analyzer on src/; and fuzzing
+#                           (scripts/fuzz.sh, PTASM_FUZZ_SECONDS each,
+#                           default 60). Implies --tidy.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -137,7 +138,8 @@ PYTHON
         exit 1
     fi
 
-    echo "== release: fuzzing -- not yet (0.2:E8.T1)"
+    echo "== release: fuzzing, ${PTASM_FUZZ_SECONDS:-60}s per harness"
+    scripts/fuzz.sh "${PTASM_FUZZ_SECONDS:-60}"
     echo "== release: MemorySanitizer -- optional, skipped (needs an MSan-instrumented libc++)"
 fi
 

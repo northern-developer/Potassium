@@ -11,10 +11,13 @@ behavior this code must keep.
 ```
 main
  |-- Cli(argc, argv) --------------------> Options
- |-- Diagnostics(stderr, warnOnly)
- |-- loadCpu(path, Diagnostics) ---------> Cpu + Machine
+ |-- Diagnostics (stderr; -w sets warnOnly)
+ |-- -I: print the instruction set, stop
+ |-- writer = Options.format->make(WriterSettings)
+ |-- loadCpuFile(path, Diagnostics) -----> Cpu + Machine (loadCpu checks both)
+ |-- writer->checkMachine(machine)         can this format take this CPU?
+ |-- any error so far: the summary line, stop
  |-- Bom bom{move(machine)}                the Bom owns the Machine
- |-- writer.checkMachine(machine)          can this format take this CPU?
  |-- Assembler(cpu, bom, diagnostics).assemble(sourceText)
  |     |-- ANTLR parse (src/grammar/ptasm.g4; Intel or AT&T entry rule)
  |     |-- AsmParser: parse tree -> SourceStatements
@@ -22,8 +25,8 @@ main
  |     |-- Layout: place the named sections            (pass 2)
  |     |-- OperandClassifier: resolve operands, relocation symbols (pass 3)
  |     `-- Encoder: form lookup, fields -> bytes + relocations      (pass 4)
- |-- writer.check(bom, diagnostics)        what the format can't hold
- |-- if no errors: writer.write(bom, out); the listing likewise
+ |-- writer->check(bom, diagnostics)       what the format can't hold
+ |-- if no errors: writer->write(bom, out); the listing likewise
  `-- the summary line, exit status
 ```
 
@@ -36,7 +39,7 @@ encoder never sees the command line.
 | Folder | Holds |
 |---|---|
 | `src/cli/` | `main`, `Cli` (command line -> `Options`), `Formats` (the `-f` table: name, extension, writer). |
-| `src/cpu/` | `Cpu` and `Machine` (`loadCpu`), `InstructionSet` (fields, formats, modes, mode sets, instructions; every form built and checked at load), `Form`. |
+| `src/cpu/` | `Cpu` and `Machine` (`loadCpuFile`, `loadCpu`), `InstructionSet` (fields, formats, modes, mode sets, instructions; every form built and checked at load), `Form`. |
 | `src/assembler/` | `AsmParser`, `Assembler`, `SymbolTable`, `Layout`, `OperandClassifier`, `Encoder`, `Diagnostics`, and the data types (`Bom.h`, `SourceStatement.h`). |
 | `src/writers/` | `ObjectWriter` and one writer per format: `BinWriter`, `RecordWriter` (`IntelHexWriter`, `SRecordWriter`), `ElfWriter`, `ListingWriter`. |
 | `src/grammar/` | `ptasm.g4` and its committed generated parser (`generated/`, rebuilt by the `regen-parser` target). |
@@ -54,7 +57,8 @@ The types every stage shares, from source to output.
   are left unevaluated.
 - **`Statement`** (`Bom.h`): a line that becomes bytes. Its `kind` is a
   variant -- `Instruction` (mnemonic, `Form`, operands), `Data` (slots),
-  `Reserve` (zero bytes, `.SPACE`), `Bytes` (as written, `.ASCII`) --
+  `Reserve` (zero bytes: `.SPACE`, `.ALIGN` padding), `Bytes` (as
+  written: `.BYTE`, strings) --
   under a shared address, size, bytes, line number and relocations.
 - **`Operand`**: one written operand, in Intel order -- its `ArgType`,
   register number, expression terms, position (`op1` = 0), address part
@@ -70,7 +74,7 @@ The types every stage shares, from source to output.
 - **`Bom`**: the finished build -- the `Machine`, the `Section`s with
   their `Statement`s and relocations, and the symbol tables. It is the
   only thing a writer reads, so a hand-built `Bom` tests any writer.
-  `docs/BOM.md` has its history.
+  `docs/BOM.md` describes it.
 
 ## 4. Passes and their invariants
 
@@ -134,14 +138,15 @@ change: it is written up (a Ticket) and agreed before code.
 | Golden | Each example's output in every format, byte for byte | `tests/golden/`, `test_examples.cpp` |
 | CLI | Exit codes, no output on error, AT&T twins equal to Intel | `ctest` scripted checks |
 | Real tools | Link with `ld`/`ld.lld` and run (QEMU for RV32I, OR1K); bytes against GCC's assembler | `tests/cmake/`, `tests/link/` |
-| Repo | Every cpu.json against the schema; the Ticket tracker against `plan/` | `tests/check-cpu-json.py`, `scripts/update-tracker.py` |
+| Repo | Every cpu.json against the schema; each release's table against its plan files | `tests/check-cpu-json.py`, `scripts/update-tracker.py` |
+| Overlay | A private CPU's examples against its golden files, when `prototype/` is linked in | `tests/cmake/prototype_golden.cmake` |
 | Tiers | Standard on every change; release-level before a release | `scripts/verify.sh` (`--tidy`, `--release`) |
 
 The standard tier runs the `test` and `asan` (ASan + UBSan) presets,
 the golden check, and Valgrind, determinism and ELF lint on the AMD64
 example. The release tier adds an `-O2` build, every example under
-those checks, coverage and clang's static analyzer;
-fuzzing joins it later (0.2:E8.T1). `docs/GETTING_STARTED.md` has the commands.
+those checks, coverage, clang's static analyzer and fuzzing
+(`tests/fuzz/`). `docs/GETTING_STARTED.md` has the commands.
 
 ## 8. Conventions
 

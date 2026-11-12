@@ -3,12 +3,10 @@
 `machines/OR1K.json` is OpenRISC 1000, revision 1.4 of the architecture: its
 ORBIS32 Class I instructions, the ones every implementation must have.
 Class II, ORBIS64, ORFPX32/64 floating point and ORVDX64 vectors are
-left out. It was built for E7.T2, the project's first big-endian
-target. It is linked with `tests/link/main.c`, run under QEMU, and
-checked against GCC's own object for `tests/link/program.c`.
-
-E7.T2 did this in two stages. Stage 1 was the instructions the C
-test program uses. Stage 2 was the rest of Class I.
+left out. It is the project's big-endian target (0.1:E7.T2). It is
+linked with `tests/link/main.c`, run under QEMU, and checked against
+GCC's own object for `tests/link/program.c`; every Class I instruction
+is also checked byte for byte against GNU as (`isa-or1k`).
 
 ---
 

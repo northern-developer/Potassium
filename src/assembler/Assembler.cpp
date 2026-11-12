@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -25,8 +26,115 @@
 #include <utility>
 #include <vector>
 
+namespace {
+
+// Where the source first stops being well-formed UTF-8 (the Unicode
+// standard's Table 3-7: no overlong forms, surrogates or code points past
+// U+10FFFF), which ANTLR's input stream would reject without saying where.
+struct Utf8Problem {
+    size_t line = 1;
+    size_t column = 1; // in characters, as ANTLR counts them
+    unsigned char byte = 0;
+};
+
+constexpr unsigned char kAsciiEnd = 0x80;
+constexpr unsigned char kContinuationLow = 0x80;
+constexpr unsigned char kContinuationHigh = 0xBF;
+
+// A character's length from its lead byte (0: no character starts so) and
+// the range its second byte must fall in.
+struct Utf8Lead {
+    size_t length = 0;
+    unsigned char low = kContinuationLow;
+    unsigned char high = kContinuationHigh;
+};
+
+Utf8Lead utf8Lead(unsigned char lead) {
+    constexpr unsigned char kTwoFirst = 0xC2;
+    constexpr unsigned char kTwoLast = 0xDF;
+    constexpr unsigned char kThreeFirst = 0xE0;
+    constexpr unsigned char kSurrogateLead = 0xED;
+    constexpr unsigned char kThreeLast = 0xEF;
+    constexpr unsigned char kFourFirst = 0xF0;
+    constexpr unsigned char kFourLast = 0xF4;
+    constexpr unsigned char kNotOverlong3 = 0xA0;   // after 0xE0
+    constexpr unsigned char kBelowSurrogate = 0x9F; // after 0xED
+    constexpr unsigned char kNotOverlong4 = 0x90;   // after 0xF0
+    constexpr unsigned char kUpToMax = 0x8F;        // after 0xF4: U+10FFFF
+    if (lead < kAsciiEnd) {
+        return {.length = 1};
+    }
+    if (lead >= kTwoFirst && lead <= kTwoLast) {
+        return {.length = 2};
+    }
+    if (lead >= kThreeFirst && lead <= kThreeLast) {
+        return {.length = 3,
+                .low = lead == kThreeFirst ? kNotOverlong3 : kContinuationLow,
+                .high = lead == kSurrogateLead ? kBelowSurrogate : kContinuationHigh};
+    }
+    if (lead >= kFourFirst && lead <= kFourLast) {
+        return {.length = 4,
+                .low = lead == kFourFirst ? kNotOverlong4 : kContinuationLow,
+                .high = lead == kFourLast ? kUpToMax : kContinuationHigh};
+    }
+    return {};
+}
+
+// Whether the character at `index`, of `lead`'s shape, is complete and well formed.
+bool wellFormed(const std::string& text, size_t index, const Utf8Lead& lead) {
+    if (lead.length == 0 || index + lead.length > text.size()) {
+        return false;
+    }
+    for (size_t next = 1; next < lead.length; ++next) {
+        auto const byte = static_cast<unsigned char>(text[index + next]);
+        unsigned char const low = next == 1 ? lead.low : kContinuationLow;
+        unsigned char const high = next == 1 ? lead.high : kContinuationHigh;
+        if (byte < low || byte > high) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::optional<Utf8Problem> firstUtf8Problem(const std::string& text) {
+    Utf8Problem at;
+    size_t index = 0;
+    while (index < text.size()) {
+        auto const lead = static_cast<unsigned char>(text[index]);
+        Utf8Lead const shape = utf8Lead(lead);
+        if (!wellFormed(text, index, shape)) {
+            at.byte = lead;
+            return at;
+        }
+        if (lead == '\n') {
+            ++at.line;
+            at.column = 1;
+        } else {
+            ++at.column;
+        }
+        index += shape.length;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 std::vector<SourceStatement> Assembler::parse(const std::string& sourceText) const {
-    antlr4::ANTLRInputStream input(sourceText);
+    if (std::optional<Utf8Problem> const problem = firstUtf8Problem(sourceText)) {
+        std::ostringstream message;
+        message << "byte 0x" << std::hex << std::uppercase << static_cast<unsigned>(problem->byte)
+                << " isn't valid UTF-8; source is read as UTF-8";
+        diagnostics->syntaxError(problem->line, problem->column, message.str());
+        return {};
+    }
+    std::optional<antlr4::ANTLRInputStream> stream;
+    try {
+        stream.emplace(sourceText);
+    } catch (const antlr4::IllegalArgumentException& error) {
+        diagnostics->syntaxError(0, 0, std::string("the source can't be read: ") + error.what());
+        return {};
+    }
+    antlr4::ANTLRInputStream& input = *stream;
     ptasmLexer lexer(&input);
     antlr4::CommonTokenStream tokens(&lexer);
     ptasmParser parser(&tokens);

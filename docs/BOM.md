@@ -72,9 +72,11 @@ Bom
   labels relative to it, and an absolute section's address in `sh_addr`.
 - **Relocations are requests, not decisions.** The encoder records what
   each field needs; each writer's `check` decides what its format can
-  hold: only `elf` takes relocations and `.EXTERN` references, and only
-  `aligned` ones or ones with their own type. `sectionRelocations(section)`
-  gives a section's relocations with offsets from the section's start.
+  hold. Only `elf` takes relocations and `.EXTERN` references, and it
+  rejects a field that isn't whole, byte-aligned bytes unless the field
+  names its own relocation type (`docs/SPEC.md` §8.4).
+  `sectionRelocations(section)` gives a section's byte-aligned
+  relocations with offsets from the section's start.
 - **Nothing is written after an error.** A writer's `check` reports into
   `Diagnostics`; `write` runs only when the whole run has no errors.
 - **Gaps**: `bin` zero-fills between sections (and from 0 with `-p`);

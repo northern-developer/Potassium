@@ -178,7 +178,10 @@ void checkKeys(const Json& json, const std::set<std::string>& allowed, const std
     }
 }
 
-FieldPiece readPiece(const Json& json, const std::string& context, Problems& problems) {
+// A piece, or nothing (reported) if its bits can't be placed: a field
+// keeps only pieces every later step can index safely, so under -w an
+// invalid one is left out rather than written out of bounds.
+std::optional<FieldPiece> readPiece(const Json& json, const std::string& context, Problems& problems) {
     FieldPiece piece;
     readIntKey(json, "bits", piece.bits, context, problems);
     readIntKey(json, "lsb", piece.lsb, context, problems);
@@ -186,13 +189,16 @@ FieldPiece readPiece(const Json& json, const std::string& context, Problems& pro
     if (piece.bits < 1 || piece.bits > kMaxBits || piece.lsb < 0 || piece.valueLsb < 0 ||
         piece.valueLsb + piece.bits > kMaxBits) {
         report(problems, {context, R"(: needs 1-64 "bits", "lsb" >= 0, and "valueLsb" + "bits" <= 64)"});
+        return std::nullopt;
     }
     return piece;
 }
 
 void readPieces(const Json& json, FieldDef& field, const std::string& context, Problems& problems) {
     if (!json.contains("pieces")) {
-        field.pieces.push_back(readPiece(json, context, problems));
+        if (std::optional<FieldPiece> const piece = readPiece(json, context, problems)) {
+            field.pieces.push_back(*piece);
+        }
         return;
     }
     if (!json.at("pieces").is_array() || json.at("pieces").empty()) {
@@ -201,7 +207,11 @@ void readPieces(const Json& json, FieldDef& field, const std::string& context, P
     }
     uint64_t seen = 0;
     for (const Json& entry : json.at("pieces")) {
-        FieldPiece const piece = readPiece(entry, context + " piece", problems);
+        std::optional<FieldPiece> const read = readPiece(entry, context + " piece", problems);
+        if (!read) {
+            continue;
+        }
+        FieldPiece const& piece = *read;
         uint64_t const mask = lowMask(piece.bits) << static_cast<unsigned>(std::clamp(piece.valueLsb, 0, kMaxBits - 1));
         if ((seen & mask) != 0) {
             report(problems, {context, ": two pieces take the same value bit"});
@@ -286,7 +296,7 @@ FieldDef readField(const std::string& name, const Json& json, Problems& problems
     }
     if (!json.contains("value") || !parseValue(json.at("value"), field.value)) {
         report(problems, {context, R"(: a "con" field needs a "value" ("0b...", "0x..." or an integer))"});
-    } else if (!fitsUnsigned(field, field.value)) {
+    } else if (!field.pieces.empty() && !fitsUnsigned(field, field.value)) { // no pieces: already reported
         report(problems, {context, ": \"value\" doesn't fit; it would lose a 1 bit"});
     }
     return field;

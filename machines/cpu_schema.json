@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ptasm machine file: a CPU, its ELF settings and its instruction encodings (E2.T2, E2.T3, E2.T4, E6.T8)",
+  "title": "ptasm machine file: a CPU, its ELF settings and its instruction encodings",
   "description": "Structure only. Cross-references (a format's fields exist, every field of a chosen format is filled exactly once, ...) are checked when ptasm loads the file.",
   "type": "object",
   "required": ["cpuName", "description", "fields", "instructions"],
   "additionalProperties": false,
   "properties": {
+    "$schema": { "type": "string", "description": "The schema an editor checks this file against: cpu_schema.json, by path or URL." },
     "cpuName": { "type": "string" },
     "maxOperands": { "type": "integer", "minimum": 2, "maximum": 9 },
     "description": { "$ref": "#/$defs/description" },

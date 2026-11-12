@@ -1,12 +1,9 @@
-# ptasm User's Guide
+# Describing a CPU: the user's guide
 
-This guide is being built incrementally, starting with what's needed
-right now: reference material for anyone writing a `cpu.json` target
-file. Everything else a user's guide would normally cover (CLI usage,
-build/install, output formats) is deferred to another day; `SPEC.md`
-(`docs/SPEC.md`) specifies all of it in the meantime, and `plan/`
-is the project's own design/decision log. The cpu.json format itself
-is specified in `SPEC.md` §6; this guide is the practical companion.
+A practical guide to describing a CPU for ptasm: writing its
+`cpu.json`. The format itself is specified in `docs/SPEC.md` §6, which
+also covers the command line, the source language and the output
+formats; `docs/DESIGN.md` explains the model behind it.
 
 ## Writing a cpu.json
 
@@ -24,6 +21,11 @@ these parts, each a top-level key. Only `cpuName`, `description`,
    how each is encoded. There are two ways to say that (below).
 5. **`modes`, `operandSets`, `modeSets`**: optional, only for the
    second way.
+
+Start the file with `"$schema": "./cpu_schema.json"` (the path to
+`machines/cpu_schema.json` from your file, or its URL): editors such as
+VS Code then complete the keys and flag a wrong one as you type. ptasm
+itself ignores it.
 
 Start from a small file and grow it. `ptasm -m <file> --isa` loads a
 cpu.json and lists every `<MNEM> <form>` it accepts, which is the
@@ -80,10 +82,12 @@ says what fills the field:
 | `reg` | an operand's register number |
 | `imm` | an operand's number, as is |
 | `addr` | an operand's number that is an address (an absolute relocation in ELF output) |
-
-An `imm` or `addr` field the CPU sign-extends (AMD64's REX.W `imm32`) takes `"signed": true`: its value must then fit as two's complement, and an `addr` one's relocation is `addr<W>:signed` (`R_X86_64_32S`).
 | `pcrel` | the operand's number minus the PC (a PC-relative branch offset); `description.relOffset` says which PC. Say what it points at with `"target"`: `"data"` (default), `"call"` or `"jump"` (SPEC §6.3) |
 | `scl` | log2 of a scale, which must be 1, 2, 4 or 8 |
+
+An `imm` or `addr` field the CPU sign-extends (AMD64's REX.W `imm32`)
+takes `"signed": true`: its value must then fit as two's complement,
+and an `addr` one's relocation is `addr<W>:signed` (`R_X86_64_32S`).
 
 Use two fields for the same bits when one operand can be either a
 constant or an address: `imm8` for `imm` operands, `addr8` for `local`
@@ -97,8 +101,8 @@ all be 0 (or, for a negative number, all 1 and agreeing with the kept
 top bit); anything else is an error, never a silent cut:
 
 ```
-SUB R3, 300
-v.asm:1: error: 300 doesn't fit field 'imm8' of 'SUB'
+ADDI R1, R2, 3000
+v.asm:1: error: 3000 doesn't fit field 'i_imm' of 'ADDI'
 ```
 
 ### `formats`, and unused bits
@@ -231,11 +235,9 @@ patterns) are keyed by these.
 | `[[pc + imm]]` | `[[PC + 0x10]]` | double-bracket PC-relative; same caveat as `[[reg + imm]]` |
 | `[reg + reg * imm + imm]` | AT&T `3(%R1,%R2,8)` | scaled index (base, index, displacement, scale) |
 
-Registers are always written `R0`-`R<regCount-1>` (ptasm's own
-numbered convention), never real hardware mnemonics like `eax`/`rax`:
-a deliberate choice for consistency across every target, including
-real-hardware ones like AMD64. See 0.1:E3.T1 for why a
-real-CPU target still uses `R7` instead of `rdi`.
+Registers are written `R0`-`R<regCount-1>` on every target, real ones
+too: AMD64's `rdi` is `R7`. CPU-specific register names are planned
+(0.2:E1.T1).
 
 ### Numbers: `imm`, `local`, `reloc`
 
@@ -322,9 +324,8 @@ written, so one cpu.json encodes the same instruction identically in
 either syntax. Order defaults to Intel's.
 
 **Operand positions.** Intel lists operands left to right, AT&T right
-to left (as GAS does). Position 1 is today's `dst` role, position 2
-`src1`, position 3 `src2` (E2.T2 renames them `op1`, `op2`,
-`op3`):
+to left (as GAS does). A cpu.json calls the positions `op1`, `op2`,
+`op3`, ...:
 
 | Syntax | Written | Position 1 | Position 2 | Position 3 |
 |---|---|---|---|---|
@@ -373,7 +374,7 @@ number). A `from` entry or a mode set's `opN` map uses these names.
 
 `--` means the syntax has no spelling for that mode yet: the AT&T front
 end covers what real x86 code needs, and Intel syntax doesn't parse a
-scaled index yet (E3). The PC in relative modes isn't
+scaled index yet. The PC in relative modes isn't
 register 1 -- it's part of the mode (`pc`). The double-bracket
 modes are this project's own test-fixture convention (TESTCPU-0),
 not a real hardware mode.
@@ -384,7 +385,7 @@ not a real hardware mode.
 the machine file's `elf` block, and `-f elf` without one is an error:
 
 ```
-SAP-1.json: error: has no "elf" block, so -f elf can't be used with this CPU
+-m SAP-1 (.../machines/SAP-1.json): error: has no "elf" block, so -f elf can't be used with this CPU
 ```
 
 The block needs `elfClass` and `relocations`. AMD64's, for example:
@@ -475,23 +476,24 @@ ptasm reports every problem it finds on stderr, GCC style, then exits 1
 without writing any output file:
 
 ```
-machines/my-cpu.json: error: field 'imm_hi': "bits" must be between 1 and 64, got 65 -- clamped to 64
 prog.asm:2: error: register 'R44' is out of range; this CPU has R0-R7
 prog.asm:3: error: AAB has no '[reg]' form; AAB accepts: reg
 prog.asm:4: error: 'FOO' isn't an instruction of TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm) eMachine:0
-ptasm: 4 errors; no output written.
+ptasm: 3 errors; no output written.
 ```
 
-Problems in your `cpu.json` (bad values, unknown field, format or mode
-set names, bits no field or `unused` range claims, unknown keys) are
-errors, and so is a source line your `cpu.json` has no form for. While you're still building a
-`cpu.json`, `-w`/`--warn` turns those into warnings: bad values are
-clamped, unknown names and unsupported lines are skipped, and output is
-written anyway. A line that names a real instruction with operands it has no form for says
-what it does accept (`<MNEM> has no '<form>' form; <MNEM> accepts: ...`); a
-mnemonic the CPU doesn't have says so (`'X' isn't an instruction of <cpuName>
-eMachine:<N>`). Problems in the source itself (syntax errors, undefined
-symbols, out-of-range registers or offsets) are always errors.
+Problems in your `cpu.json` (bad values; unknown field, format or mode
+set names; bits no field or `unused` range claims; unknown keys) are
+errors, reported with the key they belong to (`field 'imm_hi': needs
+1-64 "bits", ...`), and so is a source line your `cpu.json` has no form
+for. While you're still building a `cpu.json`, `-w`/`--warn` turns those
+into warnings: what can't be used is left out, and output is written if
+nothing else is wrong. A line that names a real instruction with
+operands it has no form for says what it does accept (`<MNEM> has no
+'<form>' form; <MNEM> accepts: ...`); a mnemonic the CPU doesn't have
+says so (`'X' isn't an instruction of <cpuName> eMachine:<N>`).
+Problems in the source itself (syntax errors, undefined symbols,
+out-of-range registers or offsets) are always errors, `-w` or not.
 
 A successful run prints nothing. `-v`/`--verbose` adds the CPU header,
 the trace and a closing `Done.`; it never changes what counts as an

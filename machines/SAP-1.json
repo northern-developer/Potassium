@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "SAP-1",
   "description": {
     "regCount": 0,

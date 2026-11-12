@@ -2,7 +2,7 @@
 
 `machines/RV32I.json` is RISC-V's 32-bit base integer instruction set,
 RV32I, and nothing else: no M, A, F, D, C or Zicsr extension, and not
-Zifencei's `FENCE.I`. It was built for E7.T1. It is linked with
+Zifencei's `FENCE.I`. It was built for 0.1:E7.T1. It is linked with
 `tests/link/main.c`, run under QEMU, and checked against GCC's own
 object for `tests/link/program.c`.
 

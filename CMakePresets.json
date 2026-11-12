@@ -117,7 +117,7 @@
     {
       "name": "fuzz",
       "displayName": "Fuzz Configuration",
-      "description": "Clang build with libFuzzer + ASan + UBSan for the fuzz/ targets",
+      "description": "Clang build with libFuzzer + ASan + UBSan for the tests/fuzz/ harnesses",
       "binaryDir": "${sourceDir}/build/fuzz",
       "generator": "Ninja",
       "cacheVariables": {
@@ -125,9 +125,11 @@
         "BUILD_TESTING": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_C_COMPILER": "clang-21",
         "CMAKE_CXX_COMPILER": "clang++-21",
-        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined,fuzzer-no-link -fno-omit-frame-pointer -g -O1",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "PTASM_FUZZ": "ON",
         "PTASM_INSTALL": "OFF",
         "CPM_SOURCE_CACHE": "${sourceDir}/.cache/cpm"
       }

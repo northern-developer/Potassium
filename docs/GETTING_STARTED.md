@@ -1,7 +1,7 @@
 # Getting started
 
-How to build and test `ptasm`, what each of the other docs in this repo
-is actually for, and how to add a new Ticket under `plan/`.
+How to build and test `ptasm`, what each of the other docs is for, and
+how to add work to the plan.
 
 ## Building
 
@@ -25,7 +25,7 @@ Other presets, same two-step `cmake --build --preset <name>` pattern:
 | `asan` | Same, instrumented with AddressSanitizer + UndefinedBehaviorSanitizer. Every change in this project gets run under this preset too, not just `test`. |
 | `release` | `-O2` (RelWithDebInfo) build with the release-level tests: every example under Valgrind, determinism and ELF lint. Run by `scripts/verify.sh --release`. |
 | `coverage` | clang source-based coverage of the test suite; `scripts/verify.sh --release` turns it into `build/coverage/report.txt`. |
-| `tsan` | ThreadSanitizer (mutually exclusive with `asan` -- there's no threading in `ptasm` today, this exists for when that changes). |
+| `tsan` | ThreadSanitizer (mutually exclusive with `asan`); ptasm has no threads, so this is for when it does. |
 | `clang-tidy` | Builds with `clang-tidy` wired in via `PTASM_CLANG_TIDY`, scoped to this project's own hand-written targets (not the ANTLR-generated code or any fetched dependency -- see `CMakeLists.txt`'s comment on why). |
 | `docs` | Builds the Doxygen docs target, if configured. |
 | `default` | Release build, no tests. |
@@ -36,6 +36,20 @@ Running the built binary directly (after `cmake --build --preset test`):
 ./build/test/ptasm examples/SAP-1.asm -m machines/SAP-1.json -f bin -o out.bin
 ./build/test/ptasm --help   # full option reference
 ```
+
+### Installing
+
+```sh
+cmake --preset default && cmake --build --preset default
+cmake --install build/default --component ptasm --prefix <prefix>
+```
+
+installs `bin/ptasm`, the machine files in `share/ptasm/machines/` and
+the licenses in `share/doc/ptasm/`. `--component ptasm` matters: without
+it the fetched dependencies install their own headers and libraries too,
+which ptasm doesn't need. An installed ptasm finds a bare `-m` name in
+its `share/ptasm/machines`; `$PTASM_MACHINES` names a folder searched
+first. `install-finds-machines` (a ctest) checks both.
 
 ### Fast iteration on a `cpu.json`
 
@@ -77,85 +91,75 @@ fails if any file under `tests/golden/` changed. Options:
   deliberately fixing (or accepting) warnings, and commit the result.
 - `--allow-golden-changes` skips the golden check, for an intended
   output change after regenerating the golden file (below).
-- `--release` then runs the full release-level tests (E8.T1), which
-  take several minutes: the `release` preset's `-O2` build and its tests,
-  among them `example-checks-all` (every example, in every format,
-  under Valgrind, determinism and ELF lint); a coverage report
-  (`build/coverage/report.txt`, for aiming new tests, with no gate); and
-  clang's static analyzer on `src/` (any finding fails; the tests are
-  left out, since doctest's macros give false leaks). It implies
-  `--tidy`. Fuzzing (0.2:E8.T1) is to join it.
+- `--release` then runs the release-level tests, which take several
+  minutes: the `release` preset's `-O2` build and its tests, among them
+  `example-checks-all`; a coverage report (`build/coverage/report.txt`,
+  for aiming new tests, with no gate); and clang's static analyzer on
+  `src/` (any finding fails; the tests are left out, since doctest's
+  macros give false leaks); and fuzzing, `scripts/fuzz.sh`, for
+  `PTASM_FUZZ_SECONDS` (default 60) per harness -- any finding fails.
+  It implies `--tidy`.
 
-The standard tier covers one example, AMD64: `valgrind-amd64-elf`, and
-`example-checks-amd64` (determinism and ELF lint,
-`tests/cmake/example_checks.cmake`). Only the release tier covers every
-example.
+**Fuzzing** on its own: `scripts/fuzz.sh [SECONDS]` builds the `fuzz`
+preset (clang, libFuzzer, ASan, UBSan) and runs both harnesses in
+`tests/fuzz/` (see its README); findings land in `build/fuzz/findings/`.
 
-Besides the doctest suites, `ctest` runs six CLI-level checks --
-`cli-errors-block-output` (exit codes, no output on error, `-w`, missing
-files), `att-twins-match-intel` (each `examples/*.asm` with an AT&T
-twin `.s` -- today `TESTCPU-0` -- must give byte-identical output in every
-format; a change to one file of a pair needs the same change in the other,
-or regenerate the twin with `scripts/to_att.py <in.asm> <out.s> --ptasm
-<ptasm> --config <cpu.json>`) and
-`testcpu0-elf-matches-bin` (`TESTCPU-0.asm` as ELFCLASS32: every section's
-`objdump -s` bytes must equal `-f bin` at its address),
-`link-pie-amd64` (assembles `examples/AMD64.asm`, the program in
-`tests/link/program.c` as clang compiles it, links it into a PIE with the
-system C compiler and `tests/link/main.c`, and runs it; the C compiler's own
-object for `program.c` must print the same; registered only on x86-64 with a
-C compiler), `link-i386` (the same for i386 as ELFCLASS32 with
-REL relocations, linked statically with `ld -m elf_i386` and run;
-registered on x86-64 with clang) and `link-msp430` (the same for MSP430 as
-ELFCLASS32, linked with `ld.lld`, checking the pointer table of ptasm's
-object and of clang's; registered only when clang targets MSP430),
-`link-rv32i` (the same for RV32I against GCC, linked with GNU ld and run
-under `qemu-riscv32`; registered when the RISC-V GNU toolchain and QEMU
-are found), `link-or1k` (the same for OpenRISC 1000, big-endian, under
-`qemu-or1k`), `isa-rv32i` (`tests/fixtures/RV32I-all.asm`, every RV32I
-form, byte for byte against GNU as) and `isa-or1k` (the same for
-`tests/fixtures/OR1K-class1.asm`, every ORBIS32 Class I instruction) -- and two repo-consistency checks that need no build: `cpu-json-schema` (`tests/check-cpu-json.py`, every
-`machines/*.json` against `machines/cpu_schema.json`; skipped if Python's
-`jsonschema` module is missing) and `ticket-tracker-in-sync`
-(`scripts/update-tracker.py --check`).
+### What `ctest` runs
 
-The RISC link tests run their programs under QEMU's user-mode emulators.
-If those aren't on `PATH`, point CMake at a QEMU build folder, once per
-build folder: `cmake --preset test -DPTASM_QEMU_DIR=<qemu>/build` (and
-the same for `asan`). The value stays in that folder's CMake cache.
+The doctest suites, one per area, all through one harness
+(`tests/harness.h`) with test CPUs in `tests/fixtures/`:
+`test_examples` (each example against its golden files), `test_source`,
+`test_encoding`, `test_elf`, `test_errors`, `test_instruction_set`,
+`test_cli` and `test_diagnostics`. Then the scripted checks, each
+registered only when the tools it needs are found:
 
-The pipeline tests are doctest suites by area -- `tests/test_examples.cpp`, `test_source.cpp`, `test_encoding.cpp`, `test_elf.cpp`, `test_errors.cpp` -- all through one harness, `tests/harness.h`, with test CPUs in `tests/fixtures/`; run via `ctest`. Most
-test cases are **characterization tests**, not correctness oracles --
-each one runs `ptasm` against a fixed `examples/*.asm` + `machines/*.json`
-pair and diffs the result against a recorded "golden" file in
-`tests/golden/`, to catch *new* regressions, not to prove the current
-output is right. Some cases (e.g. the `.EQU` redefinition check, the
-`AAY` 3-operand check) assert a specific expected string/byte sequence
-directly instead of diffing a whole golden file -- prefer that style
-for new coverage when you can state the expected outcome concretely,
-rather than adding another golden-file diff.
+| Check | What it proves | Needs |
+|---|---|---|
+| `cli-errors-block-output` | Exit codes, no output on error, `-w`, missing files | -- |
+| `att-twins-match-intel` | Each example with an AT&T twin (`.s`, today TESTCPU-0) gives byte-identical output in every format | -- |
+| `valgrind-amd64-elf` | The AMD64 example under Valgrind | Valgrind; not under a sanitizer |
+| `example-checks-amd64` | The AMD64 example, in every format: determinism and ELF lint (`tests/cmake/example_checks.cmake`) | `readelf` |
+| `testcpu0-elf-matches-bin` | TESTCPU-0 as ELFCLASS32: every section's `objdump -s` bytes equal `-f bin` at its address | `objdump` |
+| `link-pie-amd64` | The AMD64 example, the program in `tests/link/program.c` as clang compiles it, linked into a PIE with `tests/link/main.c` and run; the C compiler's own object must print the same | x86-64, a C compiler |
+| `link-i386` | The same for i386 (ELFCLASS32, REL), linked with `ld -m elf_i386` | x86-64, clang, GNU ld |
+| `link-msp430` | The same for MSP430, linked with `ld.lld`; checks the pointer table of ptasm's object and clang's | clang targeting MSP430, lld |
+| `link-rv32i`, `link-or1k` | The same for RV32I and OpenRISC 1000 against GCC, linked with GNU ld and run under QEMU | the GNU toolchain, QEMU |
+| `isa-rv32i`, `isa-or1k` | Every form in `tests/fixtures/RV32I-all.asm` / `OR1K-class1.asm`, byte for byte against GNU as | the GNU assembler |
+| `cpu-json-schema` | Every `machines/*.json` against `machines/cpu_schema.json` (`tests/check-cpu-json.py`) | Python, `jsonschema` |
+| `ticket-tracker-in-sync` | Every `plan/<V.R>/README.md` table matches its plan files (`scripts/update-tracker.py --check`) | Python |
+| `example-checks-all` | Every example under Valgrind, determinism and ELF lint | the `release` preset |
+| `prototype-*` | A private overlay's golden files (below) | the overlay |
 
-**Regenerating a golden file** (needed whenever an example `.asm` file
-or a writer's output format changes on purpose): run the real CLI
-binary, not a hand-edit, and match the exact call the test itself
-makes:
+To regenerate the AT&T twin after changing its Intel example:
+`scripts/to_att.py <in.asm> <out.s> --ptasm <ptasm> --config <cpu.json>`.
+The RISC link tests run their programs under QEMU's user-mode emulators;
+if those aren't on `PATH`, point each build folder at a QEMU build once:
+`cmake --preset test -DPTASM_QEMU_DIR=<qemu>/build` (and the same for
+`asan`). The value stays in that folder's CMake cache.
 
-- Check `tests/test_examples.cpp` for whether that specific `TEST_CASE`
-  calls `runPipeline`/`runWriter` with or without `verbose = true` --
-  the output differs, and regenerating at the wrong verbosity is a
-  mistake this project has made more than once.
-- For the stdout-trace goldens (`runPipeline`, not `runWriter`) of a
-  verbose test, strip the trailing `"Input: ..."` line
-  (`grep -v "^Input: "`) -- the real CLI prints it under `-v`, the test
-  harness's `runPipeline` never does. Warnings and errors go to stderr,
-  so they're never part of a stdout golden.
-- For writer-based goldens (`-f bin`/`hex`/`srec`, `-l` listing), just
-  redirect that writer's own output; no stripping needed.
+### Golden files
 
-After regenerating, re-run the full suite (`ctest --preset test`) and
-the `asan` preset before committing -- a passing `test` preset alone
-isn't sufficient; several real bugs in this project were only ever
-caught under `asan`.
+Most example tests are **characterization tests**: they diff ptasm's
+output against a recorded file in `tests/golden/`, to catch regressions,
+not to prove the output right. Where you can state the expected outcome
+concretely -- a message, a byte sequence -- assert it directly instead
+of adding another golden file.
+
+**Regenerating a golden file** (whenever an example or a writer's output
+changes on purpose): run the real CLI, not a hand edit, and match the
+exact call the test makes:
+
+- Check in `tests/test_examples.cpp` whether that `TEST_CASE` calls
+  `runPipeline`/`runWriter` with `verbose = true`; the output differs
+  by verbosity.
+- For a verbose trace golden (`runPipeline`), drop the CLI's `Input:`
+  line (`grep -v "^Input: "`); the harness never prints it. Warnings
+  and errors go to stderr, so they're never part of a stdout golden.
+- For a writer golden (`-f bin`/`hex`/`srec`, `-l`), redirect that
+  output as is.
+
+Then run `scripts/verify.sh --allow-golden-changes` -- the `asan` preset
+as well as `test`: several real bugs here showed up only under `asan`.
 
 ## A private CPU overlay
 

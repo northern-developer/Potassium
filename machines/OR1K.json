@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "OR1K",
   "maxOperands": 3,
   "description": {

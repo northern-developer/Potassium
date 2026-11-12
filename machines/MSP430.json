@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "MSP430 (minimal, for ELFCLASS32: MOV, AND/CMP #imm16, PUSH/POP, INC &abs, JNE, CALL #addr16, RET)",
   "maxOperands": 2,
   "description": {

@@ -33,8 +33,9 @@ an assembler (this), then a QEMU CPU model and an LLVM backend
    behavior, MASM-style listings. Where ptasm differs, it says so.
 4. **Real outputs, checked by real tools.** ELF objects link with `ld`
    and `ld.lld` and read with `objdump` and `readelf`; the real targets
-   (AMD64, i386, MSP430, RV32I, OpenRISC 1000) are tested byte for byte
-   against GCC or clang, and linked programs run.
+   (AMD64, i386, MSP430, RV32I, OpenRISC 1000) are compared with what
+   GCC or clang produce for the same program, linked, and run where an
+   emulator or the host can run them.
 5. **One concept, one word.** The same term means the same thing in the
    docs, the code and the messages (`docs/SPEC.md` §12, the glossary).
 
@@ -53,8 +54,9 @@ source line ──► operands ──► modes ──► form ──► encoding
 2. **Modes**: each operand's shape, independent of the CPU -- `reg`,
    `imm`, `[reg + imm]`, `[pc + imm]`, a scaled index, and so on. A
    number is also classified: a constant (`imm`), an address in the
-   line's own section (`local`), or one the linker must fill in
-   (`reloc`).
+   line's own section (`local`), or an address in another section or
+   an external symbol (`reloc`), which in an ELF object the linker
+   fills in.
 3. **Form**: the line's modes in order, `"reg, [reg + imm]"`. This is
    the key a cpu.json's encodings are looked up by, together with the
    mnemonic.
@@ -110,8 +112,7 @@ read. `machines/cpu_schema.json` checks its structure too.
 | listing (`-l`) | Every line with its address and bytes, then the sections and symbols, as MASM prints them. |
 
 Every format is written from the same finished build (the *BOM*), so
-they always agree: the `bin` image is the ELF object's sections at
-their addresses.
+they always agree on addresses and bytes.
 
 ## 7. Diagnostics
 

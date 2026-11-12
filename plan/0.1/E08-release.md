@@ -1,6 +1,6 @@
 # 0.1:E8: Release 0.1.1
 
-**Status:** Completed (0.1.1), 2026-11-10, but A4 (the docs pass), moved to 0.1.2.
+**Status:** Completed (0.1.2); 0.1.1 shipped without A4 (the docs pass) and A8-A9, all completed for 0.1.2.
 
 ## Goal
 
@@ -32,7 +32,7 @@ The generated GitHub Actions workflow is set aside; `.gitignore` ignores `.githu
 
 ### A4: The docs pass
 
-**Status:** Assigned -- moved to 0.1.2
+**Status:** Completed (0.1.2), 2026-11-11
 
 A general clean-up of every living document.
 
@@ -46,10 +46,22 @@ A general clean-up of every living document.
 
 **Status:** Completed (0.1.1), 2026-11-10
 
-The public repository gets a flattened history: one commit per release. Its plan is the overview -- each release's README, Epic files and the wish list; the Ticket files and `ISSUES.md` stay local until they are cleaned up.
+The public repository gets a flattened history: one commit per release. Its plan is the overview -- each release's README, Epic files and the wish list; the Ticket files and the issue logs stay with the project until they are cleaned up.
 
 ### A7: Release
 
 **Status:** Completed (0.1.1), 2026-11-10
 
 `scripts/verify.sh --release`, tag `v0.1.1`, push to <https://github.com/northern-developer/Potassium>.
+
+### A8: `CHANGELOG.md`
+
+**Status:** Completed (0.1.2), 2026-11-12
+
+A public change log, one entry per release, written from each release's `README-0m.md`.
+
+### A9: `CONTRIBUTING.md`
+
+**Status:** Completed (0.1.2), 2026-11-12
+
+How to contribute: a pointer to `docs/GETTING_STARTED.md`, `scripts/verify.sh` before a pull request, and design before code for grammar or data-model changes.

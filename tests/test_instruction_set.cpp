@@ -263,3 +263,13 @@ TEST_CASE("Forms: modes by bracket depth and words; local -> reloc is a word swa
     CHECK_FALSE(ptasm::parseForm("reg, [sp + imm]").has_value());
     CHECK_FALSE(ptasm::parseForm("[reg").has_value());
 }
+
+TEST_CASE("A field with a negative lsb is reported and left out, not indexed (issue 40)") {
+    Json json = readJson("tests/fixtures/family-cpu.json");
+    json["fields"]["dst"]["lsb"] = -20;
+    std::vector<std::string> problems;
+    loadSet(json, problems); // under ASan, an out-of-bounds write before the fix
+    CHECK(joined(problems).find(R"(field 'dst': needs 1-64 "bits", "lsb" >= 0)") != std::string::npos);
+    CHECK(joined(problems).find("belongs to no field or unused range") != std::string::npos);
+}
+

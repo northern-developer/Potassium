@@ -69,8 +69,7 @@ AAD_WIDTH .EQU 0x0005              -- defines a reusable named constant
 AAD AAD_WIDTH                      -- same AAD (mode 3, immediate) rule as above, operand is the
                                    --   .EQU constant instead of a literal
 
-BIG64 .EQU 0xFFFFFFFFFFFFFFFF      -- exercises the full 64-bit width end-to-end (see plan/0.1/ISSUES.md's
-                                   --   integer-width widening) -- not referenced by any
+BIG64 .EQU 0xFFFFFFFFFFFFFFFF      -- exercises the full 64-bit width end-to-end -- not referenced by any
                                    --   instruction (no field here is wider than 16 bits), just
                                    --   confirms parsing/storage/resolution don't truncate or
                                    --   saturate; see test_examples.cpp's dedicated check

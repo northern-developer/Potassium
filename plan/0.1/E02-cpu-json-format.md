@@ -1,6 +1,6 @@
 # 0.1:E2: The cpu.json format
 
-**Status:** Completed (0.1.1)
+**Status:** Completed (0.1.2); A1-A7 in 0.1.1, A8 in 0.1.2
 
 ## Goal
 
@@ -56,3 +56,9 @@ Design question, resolved by T2: encodings are looked up by mnemonic and form (`
 **Status:** Completed (0.1.1)
 
 Design question, resolved by T3: `imm`, `addr` and `pcrel` are distinct field kinds, so relocations and range checks follow from the kind.
+
+### A8: `$schema` in machine files
+
+**Status:** Completed (0.1.2), 2026-11-12
+
+A top-level `"$schema"` key, a string, so editors check and complete cpu.json files against `machines/cpu_schema.json`; every shipped machine file names `./cpu_schema.json`, and the user's guide shows how.

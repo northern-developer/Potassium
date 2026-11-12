@@ -1,4 +1,5 @@
 {
+  "$schema": "./cpu_schema.json",
   "cpuName": "scratch -- see the run-my-source target in CMakeLists.txt",
   "description": {
     "regCount": 8,
