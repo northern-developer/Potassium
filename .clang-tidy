@@ -11,6 +11,14 @@ Checks: >
   readability-*,
   -modernize-use-trailing-return-type,
   -portability-avoid-pragma-once
+CheckOptions:
+  # The two libraries are used through their umbrella headers.
+  misc-include-cleaner.IgnoreHeaders: 'runtime/Cpp/runtime/src/.*;nlohmann/.*'
+  # doctest's CHECK macros would each count as a branch.
+  readability-function-cognitive-complexity.IgnoreMacros: true
+  # pc is the CPU's own term; from/to name a range.
+  readability-identifier-length.IgnoredVariableNames: '^(pc|to)$'
+  readability-identifier-length.IgnoredParameterNames: '^(pc|to)$'
 WarningsAsErrors: ''
 HeaderFilterRegex: 'include/ptasm/.*'
 FormatStyle: file

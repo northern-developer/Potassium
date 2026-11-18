@@ -12,7 +12,8 @@
     "eMachine": 105,
     "elfClass": 32,
     "relocations": {
-      "addr16": 5
+      "addr16": 5,
+      "addr32": 1
     }
   },
   "fields": {

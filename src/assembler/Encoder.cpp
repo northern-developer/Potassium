@@ -32,10 +32,8 @@ const Operand* operandPart(const Statement& line, const ptasm::OperandPart& part
         if (arg.type == ArgType::none || std::cmp_not_equal(arg.operand, part.position)) {
             continue;
         }
-        bool hasReg = false;
-        bool hasVal = false;
-        classifyArgType(arg.type, hasReg, hasVal);
-        if ((wantRegister ? hasReg : hasVal) && --remaining == 0) {
+        ArgAxes const axes = classifyArgType(arg.type);
+        if ((wantRegister ? axes.hasReg : axes.hasVal) && --remaining == 0) {
             return &arg;
         }
     }

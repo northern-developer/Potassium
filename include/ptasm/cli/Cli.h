@@ -3,9 +3,12 @@
 #include <iosfwd>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "ptasm/cli/Formats.h"
+#include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/assembler/Syntax.h"
 
 // A run's settings, resolved and checked: every default applied, every
@@ -23,9 +26,29 @@ struct Options {
 	std::optional<int64_t> org;
 	bool verbose = false;
 	bool warnOnly = false;
+	DiagnosticsFormat diagnosticsFormat = DiagnosticsFormat::text;
 	bool isa = false;
 	bool pad = false;
+	bool debug = false; // -g
+	// --defsym NAME=value, in the order given.
+	std::vector<std::pair<std::string, int64_t>> defsyms;
+	bool listMachines = false;
+	// -MD: the make rule's file (-MF, or the output's path with ".d").
+	std::optional<std::string> dependencyPath;
 };
+
+// A folder a bare -m name is looked up in, and how --list-machines names it.
+struct MachineFolder {
+	std::string label; // "$PTASM_MACHINES", "installed" or "source tree"
+	std::string path;
+};
+
+// The folders a bare -m name is looked up in, in order.
+[[nodiscard]] std::vector<MachineFolder> machineFolders();
+
+// --list-machines: each folder in lookup order, then the machine files in
+// it with their cpuName; a name an earlier folder already has is shadowed.
+void listMachines(std::ostream& out);
 
 // The command line. Knows nothing about assembling.
 class Cli {

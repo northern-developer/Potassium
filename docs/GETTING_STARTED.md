@@ -87,6 +87,7 @@ fails if any file under `tests/golden/` changed. Options:
 
 - `--tidy` also rebuilds under the `clang-tidy` preset and fails if any
   check's warning count rose above `scripts/clang-tidy-baseline.txt`.
+  The baseline is empty, so any warning fails.
 - `--update-tidy-baseline` rewrites that baseline. Use it after
   deliberately fixing (or accepting) warnings, and commit the result.
 - `--allow-golden-changes` skips the golden check, for an intended
@@ -125,6 +126,14 @@ registered only when the tools it needs are found:
 | `link-msp430` | The same for MSP430, linked with `ld.lld`; checks the pointer table of ptasm's object and clang's | clang targeting MSP430, lld |
 | `link-rv32i`, `link-or1k` | The same for RV32I and OpenRISC 1000 against GCC, linked with GNU ld and run under QEMU | the GNU toolchain, QEMU |
 | `isa-rv32i`, `isa-or1k` | Every form in `tests/fixtures/RV32I-all.asm` / `OR1K-class1.asm`, byte for byte against GNU as | the GNU assembler |
+| `isa-rv32i-random`, `isa-or1k-random` | Every form `ptasm -I` lists, with random operands, every register in every position and each field's edges (a branch's farthest reach too, up to 1 MiB), byte for byte against GNU as (`tests/isa_random.py`, seed 1). A failure prints its seed and an offset-to-line map | the GNU assembler, Python |
+| `isa-rv32i-random-fresh`, `isa-or1k-random-fresh` | The same with a fresh seed each run | the `release` preset |
+| `roundtrip-rv32i`, `-or1k`, `-amd64`, `-i386`, `-msp430` | Every instruction of a generated source (`tests/isa_random.py`, seed 1) disassembles as written: mnemonic and operands, compared after each disassembler's own spelling (`tests/isa_roundtrip.py`) | the CPU's `objdump` (`llvm-objdump` for MSP430), Python |
+| `roundtrip-rv32i-fixture`, `roundtrip-or1k-fixture` | The same for `RV32I-all.asm` and `OR1K-class1.asm` | the CPU's `objdump`, Python |
+| `roundtrip-*-fresh` | The generated round trips with a fresh seed each run | the `release` preset |
+| `debug-line-RV32I-all`, `-RV32I-sections`, `-OR1K-class1` | `-g`'s address-to-line rows (and sequence ends) equal GNU as `-g`'s for the same source, after `isa-*`'s rewrite (`tests/debug_line_reference.py`); with `llvm-dwarfdump`, the object also passes `--verify` | the GNU assembler and `objdump`, Python |
+| `debug-lldb-qemu`, `debug-lldb-renode` (label `debug`) | A `-g` RV32I program (`tests/debug/count.asm`), linked at RAM, debugged in LLDB through the emulator's GDB server: a breakpoint by source line, registers, a step to the next line (`tests/debug/debug_session.py`, `session.lldb`) | LLDB, GNU `ld` for RISC-V, Python; `qemu-system-riscv32` or Renode |
+| `debug-info-verifies` | Every example with an `elf` block, assembled with `-g`, passes `llvm-dwarfdump --verify` | `llvm-dwarfdump` |
 | `cpu-json-schema` | Every `machines/*.json` against `machines/cpu_schema.json` (`tests/check-cpu-json.py`) | Python, `jsonschema` |
 | `ticket-tracker-in-sync` | Every `plan/<V.R>/README.md` table matches its plan files (`scripts/update-tracker.py --check`) | Python |
 | `example-checks-all` | Every example under Valgrind, determinism and ELF lint | the `release` preset |
@@ -135,7 +144,10 @@ To regenerate the AT&T twin after changing its Intel example:
 The RISC link tests run their programs under QEMU's user-mode emulators;
 if those aren't on `PATH`, point each build folder at a QEMU build once:
 `cmake --preset test -DPTASM_QEMU_DIR=<qemu>/build` (and the same for
-`asan`). The value stays in that folder's CMake cache.
+`asan`). The value stays in that folder's CMake cache. The same folder
+gives the debugging tests `qemu-system-riscv32`; Renode is found on
+`PATH` or given as its launcher, `-DPTASM_RENODE=<renode>/renode`, and
+LLDB as `-DPTASM_LLDB` when it isn't on `PATH`.
 
 ### Golden files
 

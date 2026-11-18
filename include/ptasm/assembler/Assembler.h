@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,9 @@ public:
 	}
 	// --org: wins over every .ORG in the source. Before assemble().
 	void overrideOrigin(int64_t org) { layout.overrideAddress(org); }
+	// --defsym NAME=value: a constant, as .EQU makes, before assemble().
+	// False if the name is already defined (an earlier --defsym).
+	bool defineSymbol(const std::string& name, int64_t value);
 
 	// Parses `sourceText`, runs its statements, then the passes; every
 	// problem is reported through the Diagnostics. Once per Assembler.
@@ -59,6 +63,7 @@ private:
 	std::vector<std::string> sourceLines;
 	std::vector<ListingNote> listingNotes;
 	SymbolTable symbols;
+	std::set<std::string> commandLineNames; // --defsym's, by SymbolTable::key
 	Syntax syntax;
 	bool verbose = false;
 	const Cpu* cpu;

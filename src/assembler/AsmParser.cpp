@@ -17,6 +17,15 @@
 
 #include "generated/ptasmParser.h"
 
+namespace {
+
+// The source line of the statement that `ctx` is a part of.
+size_t statementLine(const antlr4::ParserRuleContext* ctx) {
+    return dynamic_cast<const antlr4::ParserRuleContext&>(*ctx->parent).getStart()->getLine();
+}
+
+} // namespace
+
 std::string AsmParser::toUpper(std::string text)
 	{
     std::ranges::transform(text, text.begin(), [](unsigned char chr) { return std::toupper(chr); });
@@ -73,12 +82,11 @@ std::any AsmParser::visitInstruction(ptasmParser::InstructionContext* ctx)  {
         }
     }
 
-    auto* const statementCtx = static_cast<antlr4::ParserRuleContext*>(ctx->parent);
     Statement const line{.kind = Instruction{.mnemonic = mnemonic, .operands = args},
                        .address = address,
                        .size = instructionSize,
                        .bytes = data,
-                       .lineNumber = statementCtx->getStart()->getLine()};
+                       .lineNumber = statementLine(ctx)};
     if (verbose) {
         statements.emplace_back(directive::Trace{.text = "#" + ctx->parent->getText()});
     }
@@ -452,12 +460,11 @@ std::any AsmParser::visitAttInstruction(ptasmParser::AttInstructionContext* ctx)
     // longer than maxOperands even when the term count is within it.
     std::vector<Operand> const& args = flattenedArgs;
 
-    auto* const statementCtx = static_cast<antlr4::ParserRuleContext*>(ctx->parent);
     Statement const line{.kind = Instruction{.mnemonic = mnemonic, .operands = args},
                        .address = address,
                        .size = instructionSize,
                        .bytes = data,
-                       .lineNumber = statementCtx->getStart()->getLine()};
+                       .lineNumber = statementLine(ctx)};
     if (verbose) {
         statements.emplace_back(directive::Trace{.text = "#" + ctx->parent->getText()});
     }
@@ -546,7 +553,6 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
         handleSpace(ctx);
         return nullptr;
     }
-    auto* const statementCtx = static_cast<antlr4::ParserRuleContext*>(ctx->parent);
     if (ctx->STRING() != nullptr) {
         std::vector<u_char> data = decodeStringLiteral(ctx->STRING()->toString());
         if (ctx->DATA_STRINGZ() != nullptr) {
@@ -556,7 +562,7 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
                            .address = 0,
                            .size = data.size(),
                            .bytes = data,
-                           .lineNumber = statementCtx->getStart()->getLine()};
+                           .lineNumber = statementLine(ctx)};
         statements.emplace_back(line);
     }
     else if (ctx->expressionList() != nullptr) {
@@ -588,7 +594,7 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
                            .address = 0,
                            .size = size,
                            .bytes = std::vector<u_char>(size, 0),
-                           .lineNumber = statementCtx->getStart()->getLine()};
+                           .lineNumber = statementLine(ctx)};
         statements.emplace_back(line);
     }
 return visitChildren(ctx);
@@ -609,12 +615,11 @@ std::any AsmParser::visitByteList(ptasmParser::ByteListContext* ctx)  {
     for (antlr4::tree::TerminalNode* byteToken : ctx->BYTE()) {
         data.push_back(std::strtol(byteToken->getText().c_str(), &endPtr, kHexBase));
     }
-    auto* const statementCtx = static_cast<antlr4::ParserRuleContext*>(ctx->parent);
     Statement const line{.kind = Bytes{},
                        .address = 0,
                        .size = data.size(),
                        .bytes = data,
-                       .lineNumber = statementCtx->getStart()->getLine()};
+                       .lineNumber = statementLine(ctx)};
     statements.emplace_back(line);
 return data;
 }

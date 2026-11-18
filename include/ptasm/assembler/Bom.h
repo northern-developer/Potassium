@@ -28,30 +28,27 @@ enum class ArgType : std::uint8_t {none, reg, registerIndirect, immediate, direc
 // Assembler::processImmediates' own collapse). `indexed`/
 // `indexedindirect`/`relativeindexed` have both simultaneously (a
 // register *and* a displacement).
-inline void classifyArgType(ArgType type, bool& hasReg, bool& hasVal) {
+struct ArgAxes {
+    bool hasReg = false;
+    bool hasVal = false;
+};
+
+inline ArgAxes classifyArgType(ArgType type) {
     switch (type) {
         case ArgType::reg:
         case ArgType::registerIndirect:
-            hasReg = true;
-            hasVal = false;
-            break;
+            return {.hasReg = true, .hasVal = false};
         case ArgType::immediate:
         case ArgType::direct:
         case ArgType::relative:
-            hasReg = false;
-            hasVal = true;
-            break;
+            return {.hasReg = false, .hasVal = true};
         case ArgType::indexed:
         case ArgType::indexedIndirect:
         case ArgType::relativeIndirect:
-            hasReg = true;
-            hasVal = true;
-            break;
+            return {.hasReg = true, .hasVal = true};
         case ArgType::none:
         default:
-            hasReg = false;
-            hasVal = false;
-            break;
+            return {};
     }
 }
 

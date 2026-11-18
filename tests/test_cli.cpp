@@ -102,6 +102,19 @@ TEST_CASE("Cli: the defaults, resolved") {
     CHECK(options.cpuDisplayName == options.cpuPath);
     CHECK(!options.listPath.has_value());
     CHECK(!options.org.has_value());
+    CHECK(options.diagnosticsFormat == DiagnosticsFormat::text);
+}
+
+TEST_CASE("Cli: --diagnostics-format text, json or sarif; nothing else") {
+    for (auto const [name, format] : {std::pair{"text", DiagnosticsFormat::text}, std::pair{"json", DiagnosticsFormat::json},
+                                      std::pair{"sarif", DiagnosticsFormat::sarif}}) {
+        const Parsed parsed = parse(std::array{"prog.asm", "--diagnostics-format", name});
+        REQUIRE(std::holds_alternative<Options>(parsed.result));
+        CHECK(std::get<Options>(parsed.result).diagnosticsFormat == format);
+    }
+    const Parsed unknown = parse(std::array{"prog.asm", "--diagnostics-format=xml"});
+    REQUIRE(std::holds_alternative<int>(unknown.result));
+    CHECK(std::get<int>(unknown.result) != 0);
 }
 
 TEST_CASE("Cli: -f picks the extension, .s means AT&T, -m names a profile") {
@@ -121,10 +134,13 @@ TEST_CASE("Cli: -f picks the extension, .s means AT&T, -m names a profile") {
     CHECK(std::get<Options>(explicitSyntax.result).org == 0x100);
 }
 
-TEST_CASE("Cli: a bare -l means stdout, -l <path> a file") {
+TEST_CASE("Cli: a bare -l or -l - means stdout, -l <path> a file") {
     const Parsed bare = parse(std::array{"prog.asm", "-l"});
     REQUIRE(std::holds_alternative<Options>(bare.result));
     CHECK(std::get<Options>(bare.result).listPath == std::string());
+    const Parsed dash = parse(std::array{"prog.asm", "-l", "-"});
+    REQUIRE(std::holds_alternative<Options>(dash.result));
+    CHECK(std::get<Options>(dash.result).listPath == std::string());
     const Parsed file = parse(std::array{"prog.asm", "-l", "prog.lst"});
     REQUIRE(std::holds_alternative<Options>(file.result));
     CHECK(std::get<Options>(file.result).listPath == "prog.lst");
@@ -156,4 +172,55 @@ TEST_CASE("Cli ends the run: --help (0), an unknown format (1), no source withou
     const Parsed isa = parse(std::array{"-I", "-m", "SAP-1"});
     REQUIRE(std::holds_alternative<Options>(isa.result));
     CHECK(std::get<Options>(isa.result).isa);
+}
+
+TEST_CASE("Cli: --defsym NAME=value, decimal, 0x or negative; anything else is rejected") {
+    const Parsed parsed = parse(std::array{"prog.asm", "--defsym", "A=10", "--defsym", "B.x=0x7FF", "--defsym", "_c=-3"});
+    REQUIRE(std::holds_alternative<Options>(parsed.result));
+    using Defsyms = std::vector<std::pair<std::string, int64_t>>;
+    CHECK(std::get<Options>(parsed.result).defsyms == Defsyms{{"A", 10}, {"B.x", 0x7ff}, {"_c", -3}});
+    for (const char* bad : {"A", "A=", "=1", "1A=1", "A=x", "A=0x", "A=1.5", "R3=1", "pc=1", "RIP=1", "A=99999999999999999999"}) {
+        CAPTURE(bad);
+        const Parsed rejected = parse(std::array{"prog.asm", "--defsym", bad});
+        REQUIRE(std::holds_alternative<int>(rejected.result));
+        CHECK(std::get<int>(rejected.result) != 0);
+        CHECK(rejected.err.find("expected NAME=value") != std::string::npos);
+    }
+}
+
+TEST_CASE("Cli: -MD names the rule's file after the output; -MF names it; -MF needs -MD") {
+    const Parsed plain = parse(std::array{"prog.asm"});
+    REQUIRE(std::holds_alternative<Options>(plain.result));
+    CHECK(!std::get<Options>(plain.result).dependencyPath.has_value());
+    const Parsed md = parse(std::array{"dir/prog.asm", "-f", "elf", "-MD"});
+    REQUIRE(std::holds_alternative<Options>(md.result));
+    CHECK(std::get<Options>(md.result).dependencyPath == "dir/prog.d");
+    const Parsed mf = parse(std::array{"prog.asm", "-MD", "-MF", "deps/prog.dep"});
+    REQUIRE(std::holds_alternative<Options>(mf.result));
+    CHECK(std::get<Options>(mf.result).dependencyPath == "deps/prog.dep");
+    const Parsed alone = parse(std::array{"prog.asm", "-MF", "prog.dep"});
+    REQUIRE(std::holds_alternative<int>(alone.result));
+    CHECK(std::get<int>(alone.result) != 0);
+    // With the output on stdout, there is no path to name the rule's file after.
+    const Parsed toStdout = parse(std::array{"prog.asm", "-o", "-", "-MD"});
+    REQUIRE(std::holds_alternative<int>(toStdout.result));
+    CHECK(std::get<int>(toStdout.result) == 1);
+    CHECK(toStdout.err.find("-MF names the rule's file") != std::string::npos);
+    const Parsed named = parse(std::array{"prog.asm", "-o", "-", "-MD", "-MF", "-"});
+    REQUIRE(std::holds_alternative<Options>(named.result));
+    CHECK(std::get<Options>(named.result).dependencyPath == "-");
+}
+
+TEST_CASE("Cli: --list-machines needs no source; every folder is listed, the source tree's last") {
+    const Parsed parsed = parse(std::array{"--list-machines"});
+    REQUIRE(std::holds_alternative<Options>(parsed.result));
+    CHECK(std::get<Options>(parsed.result).listMachines);
+    std::ostringstream out;
+    listMachines(out);
+    const std::string text = out.str();
+    CHECK(text.find("installed: ") != std::string::npos);
+    auto const tree = text.find("source tree: ");
+    REQUIRE(tree != std::string::npos);
+    CHECK(text.find("\n  RV32I", tree) != std::string::npos);
+    CHECK(text.find("cpu_schema") == std::string::npos); // not a machine file
 }

@@ -20,6 +20,7 @@
 #include "ptasm/writers/ElfWriter.h"
 #include "ptasm/writers/IntelHexWriter.h"
 #include "ptasm/writers/ListingWriter.h"
+#include "ptasm/writers/ObjectWriter.h"
 #include "ptasm/writers/SRecordWriter.h"
 #include <nlohmann/json_fwd.hpp>
 

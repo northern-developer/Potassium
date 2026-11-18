@@ -1,6 +1,7 @@
 #include "ptasm/cli/Formats.h"
 #include "ptasm/writers/BinWriter.h"
 #include "ptasm/writers/ObjectWriter.h"
+#include "ptasm/writers/Dwarf.h"
 #include "ptasm/writers/ElfWriter.h"
 #include "ptasm/writers/IntelHexWriter.h"
 #include "ptasm/writers/SRecordWriter.h"
@@ -9,6 +10,7 @@
 #include <array>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -28,8 +30,13 @@ constexpr std::array kFormats{
 	             }},
 	// An object file: .o, not .elf.
 	OutputFormat{.name = "elf", .extension = "o", .binary = true,
-	             .make = [](const WriterSettings&) -> std::unique_ptr<ObjectWriter> {
-		             return std::make_unique<ElfWriter>();
+	             .make = [](const WriterSettings& settings) -> std::unique_ptr<ObjectWriter> {
+		             if (!settings.debug) {
+			             return std::make_unique<ElfWriter>();
+		             }
+		             return std::make_unique<ElfWriter>(DebugSource{.name = settings.sourceName,
+		                                                            .directory = settings.directory,
+		                                                            .producer = std::string("ptasm ") + PTASM_VERSION});
 	             }},
 };
 

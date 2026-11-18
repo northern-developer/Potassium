@@ -2,7 +2,6 @@
 #include "ptasm/assembler/Bom.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <ios>
 #include <ostream>

@@ -4,7 +4,39 @@ Notable changes to ptasm, newest first. Each release's full plan is in
 `plan/<V.R>/` (`README.md`, then `README-0m.md` for each later release).
 Versions are V.R.m: V.R is a planned release, m its published updates.
 
-## [0.1.2] -- unreleased
+## [0.1.3] -- 2026-11-17
+
+### Added
+- **`--defsym NAME=value`**: define a constant from the command line, as
+  GAS's `--defsym` does.
+- **`-MD` and `-MF`**: write a make rule of the files a run read (the
+  source and the machine file), as GCC's flags of the same names.
+- **`-g`**: DWARF 5 source-line debug information in `-f elf` objects
+  (compile unit, line table, address ranges), with the same rows as GNU
+  as `-g`, so a debugger can break on and step through source lines.
+  MSP430's machine file gains `"addr32": 1` for it.
+- **`-` as stdout** for `-o`, `-l` and `-MF`, as GNU tools take it,
+  instead of a file named `-`.
+- **`--list-machines`**: the machine files a bare `-m` name can find,
+  folder by folder in lookup order, each with its CPU's name.
+- **`--diagnostics-format=text|json|sarif`**: warnings and errors as
+  JSON (one object per line) or a SARIF 2.1.0 log, for IDEs and CI
+  annotations, as GCC's `-fdiagnostics-format`.
+- **Debugging, end to end**: a `-g` RV32I program debugged in LLDB
+  under QEMU and Renode (break on a source line, read registers, step),
+  as ctest's `debug` label when the tools are found.
+- **Test depth**: randomized encoder tests against GNU as (RV32I, OR1K),
+  and round trips through `objdump`/`llvm-objdump` for RV32I, OR1K,
+  AMD64, I386 and MSP430.
+
+### Changed
+- **Listing**: long data wraps in rows of 16 bytes, as four-byte words,
+  instead of rows as wide as the longest instruction.
+- **clang-tidy finds nothing**: the baseline
+  (`scripts/clang-tidy-baseline.txt`) is empty, so `scripts/verify.sh
+  --tidy` fails on any new warning.
+
+## [0.1.2] -- 2026-11-16
 
 ### Added
 - **Installing**: `cmake --install <build> --component ptasm` installs

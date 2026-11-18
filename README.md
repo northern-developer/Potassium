@@ -13,8 +13,11 @@ S-records or an ELF object you can link with standard tools.
 - Intel and AT&T syntax (`.s` sources are AT&T by default).
 - Output: `bin`, `hex`, `srec` (32-bit addresses), and `elf` (32- and
   64-bit, little- and big-endian, with relocations), plus a listing.
+- Source-level debugging: `-g` adds DWARF 5 line information to ELF
+  objects (checked in LLDB under QEMU and Renode).
 - No silent errors: a value that doesn't fit, an address out of range or
-  an encoding the format can't hold is an error, with its line.
+  an encoding the format can't hold is an error, with its line, as
+  GCC-style text, JSON or SARIF (`--diagnostics-format`).
 - Targets included: AMD64, i386, MSP430, RV32I and OpenRISC 1000
   (each checked against GNU or LLVM tools), and SAP-1.
 
@@ -34,7 +37,9 @@ ctest --preset test
 ```sh
 ptasm program.asm -m RV32I -f elf -o program.o
 ptasm program.s   -m AMD64 -f elf -l          # with a listing to stdout
+ptasm program.asm -m RV32I -f elf -g          # with DWARF line information
 ptasm -I -m MSP430                            # what the target supports
+ptasm --list-machines                         # the machine files -m can find
 ptasm --version
 ```
 

@@ -32,7 +32,7 @@ constexpr int64_t kMaxScale = 8;
 constexpr size_t kMaxSetExpansion = 1U << 16U;
 constexpr size_t kOperandPartLength = 8; // "op2.num1"
 
-using Json = nlohmann::json; // NOLINT(misc-include-cleaner) -- json.hpp is the library's public header
+using Json = nlohmann::json;
 using Problems = std::vector<std::string>;
 using SetValues = std::map<std::string, uint64_t>;
 

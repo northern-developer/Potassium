@@ -21,6 +21,8 @@ namespace {
 
 constexpr int kBitsPerHexDigit = 4;
 constexpr int kDefaultByteColumns = 4;
+constexpr size_t kPageWidth = 80;
+constexpr size_t kWordBytes = 4; // continuation rows group their bytes in words of this size
 constexpr size_t kNameColumn = 40; // where a table's second column starts
 constexpr int kTableColumn = 9;    // width of the Size/Length/Type/Value columns
 constexpr int kAlignColumn = 8;
@@ -33,7 +35,7 @@ constexpr const char* kSegmentsHeader =
 constexpr const char* kSymbolsHeader =
     "                N a m e                 Type     Value    Attr";
 
-std::string hex(uint64_t value, int digits) {
+std::string hex(uint64_t value, int digits) { // NOLINT(bugprone-easily-swappable-parameters) -- value, then width, as std::format
     std::ostringstream text;
     text << std::uppercase << std::hex;
     text.width(digits);
@@ -42,12 +44,24 @@ std::string hex(uint64_t value, int digits) {
     return text.str();
 }
 
+// One listing row's columns; an empty address leaves its column blank.
+struct Row {
+    std::string address;
+    std::string bytes;
+    std::string source;
+};
+
 std::string byteText(const std::vector<u_char>& data, size_t from, size_t count) {
     std::string text;
     for (size_t index = from; index < from + count && index < data.size(); ++index) {
         text += (text.empty() ? "" : " ") + hex(data[index], 2);
     }
     return text;
+}
+
+// Characters a continuation row of `words` words takes after its address.
+size_t wordsWidth(size_t words) {
+    return (words * ((kWordBytes * 3) - 1)) + ((words - 1) * 2);
 }
 
 // "COUNT . . . . ." padded with dot leaders to the second column.
@@ -85,6 +99,14 @@ public:
         if (byteColumns == 0) {
             byteColumns = kDefaultByteColumns;
         }
+        // Long data wraps in rows of whole words, as many (a power of
+        // two) as fit the page.
+        size_t const room = kPageWidth - static_cast<size_t>(addressDigits) - 2;
+        size_t words = 1;
+        while (wordsWidth(words * 2) <= room) {
+            words *= 2;
+        }
+        wrapBytes = words * kWordBytes;
         for (const ListingNote& note : bom->listingNotes) {
             notesAt[note.lineNumber].push_back(&note);
         }
@@ -98,20 +120,29 @@ private:
     std::ostream* out;
     int addressDigits = 1;
     size_t byteColumns = 0;
+    size_t wrapBytes = kWordBytes;
     std::map<size_t, std::vector<std::pair<size_t, const Statement*>>> linesAt;
     std::map<size_t, std::vector<const ListingNote*>> notesAt;
     std::map<size_t, int64_t> nextFree; // section -> first free address so far
     size_t currentSection = 0;
     bool blockShown = false;
 
-    void row(const std::string& address, const std::string& bytes, const std::string& source) {
+    void row(const Row& columns) {
         size_t const width = (byteColumns * 3) - 1;
-        std::string const addressColumn = address.empty() ? std::string(addressDigits, ' ') : address;
-        std::string const bytesColumn = bytes + std::string(width - std::min(width, bytes.size()), ' ');
-        *out << trimmedRight(addressColumn + "  " + bytesColumn + "       " + source) << '\n';
+        std::string const addressColumn = columns.address.empty() ? std::string(addressDigits, ' ') : columns.address;
+        std::string const bytesColumn = columns.bytes + std::string(width - std::min(width, columns.bytes.size()), ' ');
+        *out << trimmedRight(addressColumn + "  " + bytesColumn + "       " + columns.source) << '\n';
     }
     void symbolRow(const std::string& name, const std::string& value) {
         *out << std::string(kSymbolIndent, ' ') << name << ' ' << value << '\n';
+    }
+    // One row of long data from `from`: wrapBytes bytes, in words.
+    [[nodiscard]] std::string wordText(const std::vector<u_char>& data, size_t from) const {
+        std::string text;
+        for (size_t word = from; word < from + wrapBytes && word < data.size(); word += kWordBytes) {
+            text += (text.empty() ? "" : "  ") + byteText(data, word, kWordBytes);
+        }
+        return text;
     }
     [[nodiscard]] int64_t freeIn(size_t block) const {
         auto const found = nextFree.find(block);
@@ -122,7 +153,7 @@ private:
             return;
         }
         std::string const next = hex(static_cast<uint64_t>(freeIn(currentSection)), addressDigits);
-        row(next, "", "; end of " + bom->sections[currentSection].sectionName + ": next free " + next);
+        row({.address = next, .source = "; end of " + bom->sections[currentSection].sectionName + ": next free " + next});
         blockShown = false;
     }
     [[nodiscard]] int64_t labelAddress(const ListingNote& label) const {
@@ -209,7 +240,7 @@ void Writer::writeSourceLine(size_t number, const std::string& source) {
     }
     size_t const size = shown != nullptr ? shown->bytes.size() : 0;
     bool const wraps = size > byteColumns;
-    row(address, (shown != nullptr && !wraps) ? byteText(shown->bytes, 0, size) : "", source);
+    row({.address = address, .bytes = (shown != nullptr && !wraps) ? byteText(shown->bytes, 0, size) : "", .source = source});
     symbolRows(notes);
     if (label != nullptr) {
         nextFree[label->section] = labelAddress(*label);
@@ -219,8 +250,9 @@ void Writer::writeSourceLine(size_t number, const std::string& source) {
     if (shown == nullptr) {
         return;
     }
-    for (size_t from = 0; wraps && from < size; from += byteColumns) {
-        row(hex(static_cast<uint64_t>(shown->address) + from, addressDigits), byteText(shown->bytes, from, byteColumns), "");
+    for (size_t from = 0; wraps && from < size; from += wrapBytes) {
+        row({.address = hex(static_cast<uint64_t>(shown->address) + from, addressDigits),
+             .bytes = wordText(shown->bytes, from)});
     }
     nextFree[shownBlock] = shown->address + static_cast<int64_t>(size);
     blockShown = true;

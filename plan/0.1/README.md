@@ -25,4 +25,5 @@ log of issues are kept with the project and published later.
 ## Releases
 
 - **0.1.1** (2026-11-10): E1-E8, but E8.A4 (the docs pass), moved to 0.1.2.
-- **0.1.2**: in progress -- E2.A8, E8.A4 and E8.A8-A9; from 0.2, E4.A3 (installing) and E8 (fuzzing) (`README-02.md`).
+- **0.1.2** (2026-11-16): E2.A8, E8.A4 and E8.A8-A9; from 0.2, E4.A3 (installing) and E8.T1, A1-A2 (fuzzing) (`README-02.md`).
+- **0.1.3** (2026-11-17): the last 0.1 release: from 0.2, test depth, small CLI additions, `-g`, and debugging under QEMU and Renode (`README-03.md`).

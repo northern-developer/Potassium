@@ -8,7 +8,7 @@ CPU-specific register names (`RAX`, `SP`) from the cpu.json, with one grammar fo
 
 ## Tickets
 
-- T1: Register names from the cpu.json -- Assigned -- design agreed (2026-11-10); one amendment awaiting approval.
+- T1: Register names from the cpu.json -- Assigned -- design agreed (2026-11-10); amendment agreed (2026-11-16).
 - T2: Choosing a form by operand size -- Assigned -- needs its own design pass.
 
 ## Addenda

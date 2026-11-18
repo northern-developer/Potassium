@@ -1,6 +1,6 @@
 # ptasm 0.1.2
 
-**Status:** In progress -- all planned work done; the release step is left.
+**Status:** Completed (0.1.2), published 2026-11-16.
 
 ## Prior state: 0.1.1
 

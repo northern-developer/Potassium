@@ -3,7 +3,10 @@
 #include "ptasm/writers/ObjectWriter.h"
 #include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/cpu/Machine.h"
+#include "ptasm/writers/Dwarf.h"
 
+#include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -11,6 +14,7 @@
 #include <ios>
 #include <map>
 #include <optional>
+#include <set>
 #include <ostream>
 #include <string>
 #include <type_traits>
@@ -81,6 +85,7 @@ struct ElfLayout {
     std::vector<char> strtab{'\0'};       // offset 0: the mandatory empty string
     std::vector<char> shstrtab{'\0'};
     std::vector<PlannedSymbol> symbols{PlannedSymbol{}}; // entry 0: the mandatory null symbol
+    std::map<size_t, size_t> sectionSymbols;              // ELF section index -> its STT_SECTION symbol
     size_t localSymbols{};                               // sh_info: one past the last local
     size_t symtabName{};
     size_t strtabName{};
@@ -104,7 +109,8 @@ void placeSections(const Bom& bom, ElfLayout& layout) {
         for (const Relocation& reloc : sectionRelocations(block)) {
             if (!reloc.fieldMask.empty()) {
                 for (size_t index = 0; index < reloc.fieldMask.size(); ++index) {
-                    section.bytes.at(reloc.offset + index) &= static_cast<u_char>(~reloc.fieldMask[index]);
+                    char& byte = section.bytes.at(reloc.offset + index);
+                    byte = static_cast<char>(byte & ~reloc.fieldMask[index]);
                 }
                 continue;
             }
@@ -124,8 +130,15 @@ void placeSections(const Bom& bom, ElfLayout& layout) {
 // order), then an SHN_UNDEF entry for each relocation target never
 // defined here. Returns each symbol's index by its as-written spelling,
 // which a linker matches exactly (bom.symbols.values() may be case-folded).
-std::map<std::string, size_t> addSymbols(const Bom& bom, ElfLayout& layout) {
+std::map<std::string, size_t> addSymbols(const Bom& bom, const std::set<size_t>& sectionSymbols, ElfLayout& layout) {
     std::map<std::string, size_t> index;
+    // A section symbol for each section a debug section refers to.
+    for (size_t const section : sectionSymbols) {
+        layout.sectionSymbols[section] = layout.symbols.size();
+        layout.symbols.push_back(PlannedSymbol{.bind = STB_LOCAL,
+                                               .type = STT_SECTION,
+                                               .section = static_cast<std::uint16_t>(section)});
+    }
     auto const add = [&](const std::string& key, int64_t address, bool global) {
         auto const display = bom.symbols.displayNames().find(key);
         std::string const& name = display != bom.symbols.displayNames().end() ? display->second : key;
@@ -189,19 +202,19 @@ void addRelocations(const Bom& bom, const std::map<std::string, size_t>& symbolI
 
 // .shstrtab: the sections' names, the three tables', then each relocation
 // section's, in section order.
-void nameSections(const Bom& bom, ElfLayout& layout) {
-    for (size_t index = 0; index < bom.sections.size(); ++index) {
-        layout.sections[index].name = addString(layout.shstrtab, bom.sections[index].sectionName);
+void nameSections(const std::vector<std::string>& names, ElfLayout& layout) {
+    for (size_t index = 0; index < names.size(); ++index) {
+        layout.sections[index].name = addString(layout.shstrtab, names[index]);
     }
     layout.symtabName = addString(layout.shstrtab, ".symtab");
     layout.strtabName = addString(layout.shstrtab, ".strtab");
     layout.shstrtabName = addString(layout.shstrtab, ".shstrtab");
-    for (size_t index = 0; index < bom.sections.size(); ++index) {
+    for (size_t index = 0; index < names.size(); ++index) {
         if (layout.sections[index].relocations.empty()) {
             continue;
         }
         // ".rela" + ".text", but ".rela." + "ORG_0".
-        const std::string& name = bom.sections[index].sectionName;
+        const std::string& name = names[index];
         std::string relocationName = layout.rel ? ".rel" : ".rela";
         if (!name.starts_with('.')) {
             relocationName += '.';
@@ -210,13 +223,63 @@ void nameSections(const Bom& bom, ElfLayout& layout) {
     }
 }
 
-ElfLayout planElf(const Bom& bom) {
+// The relocation type for an absolute field of `size` bytes ("addr32").
+std::optional<int> absoluteType(const Machine& machine, int size) {
+    if (!machine.elf) {
+        return std::nullopt;
+    }
+    auto const found = machine.elf->relocations.find("addr" + std::to_string(size * static_cast<int>(kBitsPerByte)));
+    return found == machine.elf->relocations.end() ? std::nullopt : std::optional<int>(found->second);
+}
+
+// -g's sections after the Bom's: their bytes, and a relocation against a
+// section symbol for each reference (REL keeps the addend in the field).
+void addDebugSections(const Bom& bom, std::vector<DebugSection> debugSections, ElfLayout& layout,
+                      std::vector<std::string>& names) {
+    size_t const first = layout.sections.size();
+    auto const elfIndex = [first](const DebugReference& reference) {
+        return kFirstSectionIndex + (reference.target == DebugReference::Target::code ? 0 : first) + reference.index;
+    };
+    for (DebugSection& debugSection : debugSections) {
+        PlannedSection section{.kind = {.type = SHT_PROGBITS, .flags = 0}, .bytes = std::move(debugSection.bytes),
+                               .alignment = 1};
+        for (const DebugReference& reference : debugSection.references) {
+            if (layout.rel) {
+                ObjectWriter::storeValue(section.bytes, {.offset = reference.offset, .size = reference.size},
+                                        static_cast<uint64_t>(reference.addend), bom.machine.description.byteOrder);
+            }
+            section.relocations.push_back(PlannedRelocation{.offset = reference.offset,
+                                                            .symbol = layout.sectionSymbols.at(elfIndex(reference)),
+                                                            .type = absoluteType(bom.machine, reference.size).value_or(0),
+                                                            .addend = reference.addend});
+        }
+        names.push_back(debugSection.name);
+        layout.sections.push_back(std::move(section));
+    }
+}
+
+ElfLayout planElf(const Bom& bom, const std::optional<DebugSource>& debug) {
     ElfLayout layout;
     layout.rel = bom.machine.elf && bom.machine.elf->relocationFormat == RelocationFormat::rel;
     placeSections(bom, layout);
-    std::map<std::string, size_t> const symbolIndex = addSymbols(bom, layout);
+    std::vector<std::string> names;
+    names.reserve(bom.sections.size());
+    for (const Section& block : bom.sections) {
+        names.push_back(block.sectionName);
+    }
+    std::vector<DebugSection> debugSections = debug ? buildDwarf(bom, *debug) : std::vector<DebugSection>{};
+    std::set<size_t> sectionSymbols;
+    for (const DebugSection& debugSection : debugSections) {
+        for (const DebugReference& reference : debugSection.references) {
+            sectionSymbols.insert(kFirstSectionIndex +
+                                  (reference.target == DebugReference::Target::code ? 0 : bom.sections.size()) +
+                                  reference.index);
+        }
+    }
+    std::map<std::string, size_t> const symbolIndex = addSymbols(bom, sectionSymbols, layout);
     addRelocations(bom, symbolIndex, layout);
-    nameSections(bom, layout);
+    addDebugSections(bom, std::move(debugSections), layout, names);
+    nameSections(names, layout);
     return layout;
 }
 
@@ -280,6 +343,12 @@ void writeBytes(std::ostream& out, const std::vector<char>& bytes) {
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
 }
 
+template <typename Entry>
+void writeRaw(std::ostream& out, const Entry& entry) {
+    auto const bytes = std::bit_cast<std::array<char, sizeof(Entry)>>(entry);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
 // A layout in one class's structures, in one byte order. File order: Ehdr,
 // the sections, .symtab, .strtab, .shstrtab, each relocation section in
 // section order, then the section headers -- whose order matches: null,
@@ -321,7 +390,7 @@ public:
     void write(std::ostream& out, int eMachine) const {
         std::vector<typename Types::Shdr> const headers = sectionHeaders();
         typename Types::Ehdr const ehdr = fileHeader(eMachine, headers);
-        out.write(reinterpret_cast<const char*>(&ehdr), sizeof(ehdr));
+        writeRaw(out, ehdr);
         for (const PlannedSection& section : layout->sections) {
             if (section.kind.type != SHT_NOBITS) {
                 writeBytes(out, section.bytes);
@@ -333,8 +402,9 @@ public:
         for (const std::vector<char>& entries : relocations) {
             writeBytes(out, entries);
         }
-        out.write(reinterpret_cast<const char*>(headers.data()),
-                  static_cast<std::streamsize>(sizeof(typename Types::Shdr) * headers.size()));
+        for (const typename Types::Shdr& header : headers) {
+            writeRaw(out, header);
+        }
     }
 
 private:
@@ -587,13 +657,25 @@ void ElfWriter::check(const Bom& bom, Diagnostics& diagnostics) const {
     }
     reportUnaligned(bom, diagnostics);
     reportFieldTypesInRel(bom, diagnostics);
+    if (debug) {
+        // -g's offsets are 32-bit, its addresses the CPU's address size.
+        std::set<int> const sizes{4, dwarfAddressSize(bom.machine.description.addressBits)};
+        for (int const size : sizes) {
+            if (!absoluteType(bom.machine, size)) {
+                diagnostics.configError(R"(-g needs "elf"."relocations" to give 'addr)" +
+                                        std::to_string(size * static_cast<int>(kBitsPerByte)) +
+                                        "', the type for a " + std::to_string(size * static_cast<int>(kBitsPerByte)) +
+                                        "-bit absolute address");
+            }
+        }
+    }
 }
 
 void ElfWriter::write(const Bom& bom, std::ostream& out) const {
     if (bom.sections.empty()) {
         return;
     }
-    ElfLayout const layout = planElf(bom);
+    ElfLayout const layout = planElf(bom, debug);
     bool const big = bom.machine.description.byteOrder == ByteOrder::big;
     int const eMachine = bom.machine.elf ? bom.machine.elf->eMachine : 0;
     if (isElf32(bom.machine)) {

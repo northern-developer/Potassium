@@ -14,6 +14,13 @@ of truth: the machine file (`machines/<CPU>.json`).
    machine file (`plan/0.2/E06-qemu.md`).
 3. **An LLVM backend**, first by hand, then generated
    (`plan/0.2/E07-llvm.md`).
+4. **A Renode CPU model**, generated from the same machine file
+   (`plan/0.2/E11-renode.md`).
+
+Programs for any of these CPUs should be debuggable under QEMU and
+Renode: through their GDB servers, with LLDB as the intended debugger
+(it reuses the LLVM backend) and a GDB port on the wish list. No design
+choice should rule this out.
 
 A prototype CPU drives the work; the goals are reached for it first, and
 for any CPU the machine file can describe.

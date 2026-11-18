@@ -19,6 +19,7 @@ format · 7 Encoding · 8 Output formats · 9 Diagnostics · 10 Internals ·
 ```
 ptasm [options] source
 ptasm -I [-m machine]
+ptasm --list-machines
 ```
 
 | Option | Meaning | Default |
@@ -26,19 +27,27 @@ ptasm -I [-m machine]
 | `source` | Source file to assemble. | required (except `-I`) |
 | `-m`, `--machine`, `--arch` | cpu.json: a bare name is looked up as `<name>.json` (`.json` appended if missing) in `$PTASM_MACHINES`, then the installed `share/ptasm/machines` beside the binary's `bin/`, then the source tree's `machines/`; the first folder that has it wins. Anything containing `/`, or absolute, is used as a path. | `my-cpu` |
 | `-f`, `--format` | `bin`, `hex`, `srec` or `elf` (§8). | `bin` |
-| `-o`, `--output` | Output file. | the source path with its extension replaced: `.bin`, `.hex`, `.srec`, or `.o` for `elf` |
-| `-l`, `--list [path]` | Also write a listing (§8.5) to `path`, or to stdout if no path is given. | off |
+| `-o`, `--output` | Output file; `-` for stdout. | the source path with its extension replaced: `.bin`, `.hex`, `.srec`, or `.o` for `elf` |
+| `-l`, `--list [path]` | Also write a listing (§8.5) to `path`, or to stdout if no path is given or it is `-`. | off |
 | `--org N` | Start address (decimal or `0x` hex). Overrides every `.ORG` in the source. | 0 |
 | `-s`, `--syntax` | `intel` or `att` (§2.1). | `att` if the source ends in `.s`, else `intel` |
 | `-w`, `--warn` | Downgrade cpu.json problems and "no encoding rule" errors to warnings (§9.2). | off |
+| `--diagnostics-format text\|json\|sarif` | How warnings and errors are written (§9.3): GCC-style text, JSON (one object per line) or one SARIF 2.1.0 log. | `text` |
 | `-v`, `--verbose` | Print the CPU header, internal trace output, a summary of the effective settings and `Done.`. Never changes what counts as an error. | off |
 | `-I`, `--isa` | Print the cpu.json's CPU header and every supported mnemonic/operand combination, then exit. | — |
 | `-p`, `--pad` | `-f bin` only: zero-fill from address 0 up to the lowest section address. | off |
+| `-g` | `-f elf` only (with another format it is an error): add DWARF 5 source-line information (§8.4), so a debugger can map addresses to source lines. | off |
+| `--defsym NAME=value` | Define a constant, as `NAME .EQU value` would before the first line (§2.4). `value` is a decimal or `0x` number, optionally negative; `NAME` is spelled as in the source and can't be a register (`R<n>`, `PC`, `RIP`). Repeatable; the same name twice is an error. | -- |
+| `-MD` | Also write a make rule naming the files the run read: `output: source machine-file`, spaces and `#` escaped with `\`, `$` as `$$`. Written only when the output is. | off |
+| `-MF path` | With `-MD`: the rule's file; `-` for stdout. Without `-MD` it is an error, and `-MD` with `-o -` needs it. | the output's path with its extension replaced by `.d` |
+| `--list-machines` | Print each folder a bare `-m` name is looked up in, in order (`$PTASM_MACHINES` if set, the installed folder, the source tree's), marked "(not found)" if missing, then the machine files in it (those with a `cpuName`), each with its `cpuName`; a name an earlier folder already has is marked "(shadowed by ...)". Then exit; no source needed. | -- |
 | `-h`, `--help` | Usage. | — |
-| `--version` | Print `ptasm` and its version (e.g. `ptasm 0.1.1`), then exit. | — |
+| `--version` | Print `ptasm` and its version (e.g. `ptasm 0.1.3`), then exit. | — |
 
 A successful run prints nothing (unless `-v`) and exits 0. A run with any
 error writes no output file (neither `-o` nor `-l`) and exits 1 (§9).
+Outputs sent to stdout (`-`) come in a fixed order: the object, the
+listing, the make rule, then `-v`'s summary.
 
 ## 2. Source language
 
@@ -94,7 +103,9 @@ A comment starts with `;`, `--` or `#` and runs to the end of the line.
   same name twice is an error.
 - A **constant** (`name .EQU expr`) is a plain number. Redefining one is
   an error. Its expression is evaluated immediately, so any name it uses
-  must already be defined.
+  must already be defined. `--defsym NAME=value` defines one from the
+  command line (§1); defining that name again in the source, as any kind
+  of name, is the error "'NAME' is already defined by --defsym".
 - A **redefinable constant** (`name .SET expr`) may be set again; a use
   sees the value of the nearest `.SET` of that name above it in the
   file (a `.SET`'s own expression included: `N .SET N + 1`). A use
@@ -564,6 +575,27 @@ or, with `elf.relocationFormat: "rel"`, `SHT_REL` (`.rel<name>`).
   Output is still written (the object links with `-no-pie`). ELFCLASS32
   targets never warn: MSP430 and TESTCPU-0 have no PIE, and i386 PIE code
   (through the GOT) isn't something ptasm writes.
+- **Debug information** (`-g`): DWARF 5, 32-bit format, as GNU as writes
+  it for an assembly source, after the other sections, none loaded:
+  - `.debug_info`: one compile unit -- the source's name as given, the
+    directory it was assembled in, the producer (`ptasm <version>`), the
+    language `DW_LANG_Mips_Assembler`, its line table, and its code: one
+    code section as `DW_AT_low_pc`/`DW_AT_high_pc`, more as
+    `DW_AT_ranges` into `.debug_rnglists`;
+  - `.debug_abbrev`, for it;
+  - `.debug_line`: one sequence per code section, a row for each
+    instruction (its address and source line); data and padding have no
+    rows. The source is file 0, and again file 1, which the line
+    program uses;
+  - `.debug_aranges`: each code section's range;
+  - `.debug_rnglists` when there is more than one code section.
+
+  The addresses and the offsets between debug sections are relocations
+  against section symbols (`STT_SECTION`), of the type `addr32` for an
+  offset and `addr<N>` for an address, `N` being `description.addressBits`
+  rounded up to 16, 32 or 64 (`elf.relocations`, §6.2); a machine file
+  without them can't take `-g`, and says so. A source with no
+  instructions in a code section gets no debug sections.
 
 ### 8.5 Listing (`-l`)
 
@@ -574,7 +606,9 @@ MASM-style: every source line in order, then two tables.
   bits); hex is upper case. The bytes column is as wide as the file's
   longest instruction; a line whose bytes fit is listed on one row.
   Longer data is listed as its source row with no bytes, then rows of
-  bytes, each with its own address.
+  bytes, each with its own address: 16 bytes to a row, in four-byte
+  words separated by two spaces (fewer words if the address is too wide
+  for 16 to fit 80 columns).
 - **Symbol rows**, indented 9 spaces, under the line that sets them:
   `COUNT =0003` for an absolute value (a `.EQU`/`.SET` constant, a label
   in an absolute section); `msg (.data)+0000` for a label in a named
@@ -655,6 +689,24 @@ Errors, or warnings under `-w`:
 Always warnings (output is written):
 
 - `-f elf`, ELF64: an absolute relocation a PIE can't load (§8.4).
+
+### 9.3 Machine-readable diagnostics (`--diagnostics-format`)
+
+The same messages, in the same order, for IDEs and CI annotations, still
+on stderr; the exit status is unchanged and the text summary line is
+left out.
+
+- **`json`**: one object per line, as each message is printed:
+  `{"file":"a.asm","line":3,"column":5,"severity":"error","message":"..."}`.
+  `file` is the source, the cpu.json's path, or absent for a message
+  about neither; `line` and `column` are absent when not known;
+  `severity` is `error` or `warning`.
+- **`sarif`**: one SARIF 2.1.0 log when the run ends, even a run with
+  no messages (`"results": []`): tool `ptasm` and its version, then a
+  result per message with its `level` (`error`/`warning`), text and,
+  when it has a file, a location (`uri`: a relative path as given, an
+  absolute one as `file://`, percent-encoded; `startLine`,
+  `startColumn`).
 
 ## 10. Internals
 

@@ -8,26 +8,8 @@ Tests that scale with the instruction sets: check encodings against
 independent tools rather than recorded output, and find what the
 current tests can't.
 
-## Addenda
+## Tickets
 
-### A1: Round trips through a disassembler
-
-**Status:** Assigned (2026-11-12)
-
-Assemble every form, disassemble with `objdump`/`llvm-objdump`, and
-compare with the source, as LLVM's MC tests do; it scales better than
-golden files, and fits 0.2:E3.A6 (a PC CPU's full instruction set).
-
-### A2: Randomized encoder tests
-
-**Status:** Assigned (2026-11-12)
-
-Random valid operands for every form of every machine, checked against
-GNU as where a reference exists, extending `isa-rv32i`/`isa-or1k` to
-every form.
-
-### A3: Mutation testing
-
-**Status:** Assigned (2026-11-12)
-
-Mutate the code and check that a test fails, once coverage is stable.
+- T1: Round trips through a disassembler -- Completed (0.1.3), 2026-11-16.
+- T2: Randomized encoder tests -- Completed (0.1.3), 2026-11-16.
+- T3: Mutation testing -- Dropped (2026-11-17) -- Mull uses too much local RAM.

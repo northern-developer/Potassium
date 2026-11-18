@@ -41,7 +41,7 @@ encoder never sees the command line.
 | `src/cli/` | `main`, `Cli` (command line -> `Options`), `Formats` (the `-f` table: name, extension, writer). |
 | `src/cpu/` | `Cpu` and `Machine` (`loadCpuFile`, `loadCpu`), `InstructionSet` (fields, formats, modes, mode sets, instructions; every form built and checked at load), `Form`. |
 | `src/assembler/` | `AsmParser`, `Assembler`, `SymbolTable`, `Layout`, `OperandClassifier`, `Encoder`, `Diagnostics`, and the data types (`Bom.h`, `SourceStatement.h`). |
-| `src/writers/` | `ObjectWriter` and one writer per format: `BinWriter`, `RecordWriter` (`IntelHexWriter`, `SRecordWriter`), `ElfWriter`, `ListingWriter`. |
+| `src/writers/` | `ObjectWriter` and one writer per format: `BinWriter`, `RecordWriter` (`IntelHexWriter`, `SRecordWriter`), `ElfWriter` (with `-g`, the DWARF sections `buildDwarf` makes, `Dwarf.h`), `ListingWriter`. |
 | `src/grammar/` | `ptasm.g4` and its committed generated parser (`generated/`, rebuilt by the `regen-parser` target). |
 | `include/ptasm/` | Headers, mirroring `src/`. |
 | `machines/` | The cpu.json files `-m` loads, and `cpu_schema.json`. |

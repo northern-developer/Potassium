@@ -1,0 +1,10 @@
+gdb-remote PORT
+breakpoint set --file count.asm --line 11
+continue
+register read pc x10
+continue
+register read x10
+thread step-inst
+frame info
+register read x10
+kill

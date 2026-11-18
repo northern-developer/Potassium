@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include "ptasm/writers/ObjectWriter.h"
@@ -9,6 +10,9 @@
 // own (never the command-line options).
 struct WriterSettings {
 	bool pad = false; // -p/--pad: -f bin zero-pads from address 0
+	bool debug = false; // -g: -f elf adds DWARF source-line information
+	std::string sourceName; // -g: the source, as given
+	std::string directory;  // -g: where it was assembled
 };
 
 // One -f output format. The table below is the only place a format is

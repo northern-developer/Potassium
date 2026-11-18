@@ -40,9 +40,9 @@ Whether equivalent Intel and AT&T operands always map to the same mode; fixed if
 
 ### A6: `--defsym NAME=value`
 
-**Status:** Assigned (2026-11-12)
+**Status:** Completed (0.1.3), 2026-11-16: `--defsym` (repeatable); defining the name again in the source, as a label, `.EQU` or `.SET`, is "'X' is already defined by --defsym"; the same name twice, or a register name, is an error. Tests in `test_cli.cpp` and `test_errors.cpp`
 
-Define a constant from the command line, as GAS's `--defsym` and NASM's `-D` do.
+Define a constant from the command line, as GAS's `--defsym` and NASM's `-D` do. The value is a number only, so the grammar is untouched; it defines a constant as `.EQU` does, seen in every pass; the same name defined again in the source is an error ("'X' is already defined by --defsym").
 
 ### A7: `.INCLUDE`
 

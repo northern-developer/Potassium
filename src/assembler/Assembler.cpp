@@ -97,24 +97,40 @@ bool wellFormed(const std::string& text, size_t index, const Utf8Lead& lead) {
 }
 
 std::optional<Utf8Problem> firstUtf8Problem(const std::string& text) {
-    Utf8Problem at;
+    Utf8Problem problem;
     size_t index = 0;
     while (index < text.size()) {
         auto const lead = static_cast<unsigned char>(text[index]);
         Utf8Lead const shape = utf8Lead(lead);
         if (!wellFormed(text, index, shape)) {
-            at.byte = lead;
-            return at;
+            problem.byte = lead;
+            return problem;
         }
         if (lead == '\n') {
-            ++at.line;
-            at.column = 1;
+            ++problem.line;
+            problem.column = 1;
         } else {
-            ++at.column;
+            ++problem.column;
         }
         index += shape.length;
     }
     return std::nullopt;
+}
+
+// One operand of a --verbose statement dump.
+void dumpOperand(const Operand& arg) {
+    std::cout << arg.label << " ";
+    std::cout << static_cast<int>(arg.type) << " ";
+    std::cout << arg.value << " ";
+    std::cout << "[";
+    for (Term const& immediate : arg.terms) {
+        if (!immediate.label.empty()) {
+            std::cout << immediate.label << ", ";
+        } else {
+            std::cout << immediate.value << ", ";
+        }
+    }
+    std::cout << "] ";
 }
 
 } // namespace
@@ -152,6 +168,14 @@ std::vector<SourceStatement> Assembler::parse(const std::string& sourceText) con
         asmParser.visitIntelProg(parser.intelProg());
     }
     return asmParser.takeStatements();
+}
+
+bool Assembler::defineSymbol(const std::string& name, int64_t value) {
+    if (!symbols.addConstant(name, value)) {
+        return false;
+    }
+    commandLineNames.insert(symbols.key(name));
+    return true;
 }
 
 void Assembler::assemble(const std::string& sourceText) {
@@ -198,7 +222,9 @@ void Assembler::run(const directive::Org& org) {
 void Assembler::run(const directive::Equ& equ) {
     int64_t const value = evaluate(equ.terms, equ.line);
     if (!equ.name.empty()) {
-        if (!symbols.addConstant(equ.name, value)) {
+        if (commandLineNames.contains(symbols.key(equ.name))) {
+            diagnostics->error(equ.line, "'" + equ.name + "' is already defined by --defsym");
+        } else if (!symbols.addConstant(equ.name, value)) {
             diagnostics->error(equ.line, symbols.isRedefinable(equ.name)
                                              ? "'" + equ.name + "' is already a .SET constant; a name can't be both"
                                              : "'" + equ.name + "' is already defined; .EQU does not allow redefinition");
@@ -213,7 +239,9 @@ void Assembler::run(const directive::Equ& equ) {
 
 void Assembler::run(const directive::Set& set) {
     int64_t const value = evaluate(set.terms, set.line);
-    if (!symbols.addRedefinable(set.name, value, set.line)) {
+    if (commandLineNames.contains(symbols.key(set.name))) {
+        diagnostics->error(set.line, "'" + set.name + "' is already defined by --defsym");
+    } else if (!symbols.addRedefinable(set.name, value, set.line)) {
         diagnostics->error(set.line, "'" + set.name + "' is already defined as a label or .EQU constant; "
                                                       "a name can't also be a .SET constant");
     } else {
@@ -298,7 +326,9 @@ void Assembler::runPasses() {
 
 void Assembler::run(const directive::Label& label) {
     if (!symbols.addLabel(label.name, layout.address(), layout.currentIndex())) {
-        diagnostics->error(label.line, "'" + label.name + "' is already defined");
+        diagnostics->error(label.line, commandLineNames.contains(symbols.key(label.name))
+                                           ? "'" + label.name + "' is already defined by --defsym"
+                                           : "'" + label.name + "' is already defined");
     }
     layout.noteLabel(label.line);
     addListingNote({.lineNumber = label.line, .kind = ListingNote::Kind::label, .name = label.name});
@@ -311,10 +341,7 @@ bool Assembler::addStatement(Statement line) {
 		static const std::vector<Operand> kNone;
 		const std::vector<Operand>* operands = operandsOf(line);
 		for (Operand const& arg : operands != nullptr ? *operands : kNone) {
-			bool hasReg = false;
-			bool hasVal = false;
-			classifyArgType(arg.type, hasReg, hasVal);
-			if (hasReg && arg.value >= bom->machine.description.regCount) {
+			if (classifyArgType(arg.type).hasReg && arg.value >= bom->machine.description.regCount) {
 				diagnostics->error(line.lineNumber, "register 'R" + std::to_string(arg.value) +
 				                                        "' is out of range; this CPU has R0-R" +
 				                                        std::to_string(bom->machine.description.regCount - 1));
@@ -378,18 +405,7 @@ void Assembler::dumpLines() {
                 std::cout << (instructionOf(line) != nullptr ? instructionOf(line)->mnemonic : "") << " ";
                 static const std::vector<Operand> kNone;
                 for (Operand const& arg : operandsOf(line) != nullptr ? *operandsOf(line) : kNone) {
-                    std::cout << arg.label << " ";
-                    std::cout << static_cast<int>(arg.type) << " ";
-                    std::cout << arg.value << " ";
-                    std::cout << "[";
-                    for (Term const& immediate : arg.terms) {
-                        if (!immediate.label.empty()) {
-                            std::cout << immediate.label << ", ";
-                        } else {
-                            std::cout << immediate.value << ", ";
-                        }
-                    }
-                    std::cout << "] ";
+                    dumpOperand(arg);
                 }
                 std::cout << " [";
                 for (u_char const byte : line.bytes) {

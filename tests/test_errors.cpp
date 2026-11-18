@@ -2,10 +2,14 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <sstream>
 #include <string>
+#include <sys/types.h>
+#include <utility>
 #include <vector>
 
+#include "ptasm/assembler/Bom.h"
 #include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/assembler/Syntax.h"
 #include "ptasm/cpu/Cpu.h"
@@ -260,3 +264,26 @@ TEST_CASE("A machine file may name its schema with \"$schema\", a string (E2.A8)
           std::vector<std::string>{R"("$schema" must be a string: the path or URL of the machine file schema)"});
 }
 
+
+TEST_CASE("--defsym: a constant as .EQU makes; the source can't define it again") {
+    const std::string cpu = std::string(PTASM_SOURCE_DIR) + "/machines/RV32I.json";
+    std::string diagnosticsText;
+    const std::vector<std::pair<std::string, int64_t>> limit{{"LIMIT", 0x7ff}, {"NEG", -5}};
+    Bom const bom = assembleText("start:\n    addi r1, r0, LIMIT\n    addi r2, r0, NEG\n", cpu, diagnosticsText,
+                                 {.defsyms = limit});
+    CHECK(diagnosticsText.empty());
+    CHECK(allBytes(bom) == std::vector<u_char>{0x93, 0x00, 0xf0, 0x7f, 0x13, 0x01, 0xb0, 0xff});
+
+    assembleText("LIMIT .EQU 4\n", cpu, diagnosticsText, {.defsyms = limit});
+    CHECK(diagnosticsText == "test.asm:1: error: 'LIMIT' is already defined by --defsym\n");
+    assembleText("limit .SET 4\n", cpu, diagnosticsText, {.defsyms = limit});
+    CHECK(diagnosticsText == "test.asm:1: error: 'limit' is already defined by --defsym\n");
+    assembleText("Limit:\n    nop\n", cpu, diagnosticsText, {.defsyms = limit});
+    CHECK(diagnosticsText == "test.asm:1: error: 'Limit' is already defined by --defsym\n");
+
+    assembleText("    nop\n", cpu, diagnosticsText, {.defsyms = {{"A", 1}, {"a", 2}}});
+    CHECK(diagnosticsText == "ptasm: error: --defsym 'a' is given more than once\n");
+    // AT&T names keep their case, so A and a are two names there.
+    assembleText("    nop\n", cpu, diagnosticsText, {.syntax = Syntax::att, .defsyms = {{"A", 1}, {"a", 2}}});
+    CHECK(diagnosticsText.empty());
+}

@@ -110,6 +110,7 @@ struct AssembleOptions {
     std::string sourceName = "test.asm";
     bool reportCpuProblems = false;    // the cpu.json's problems in the diagnostics too, as the CLI
     std::string* trace = nullptr;      // where stdout goes (discarded if null)
+    std::vector<std::pair<std::string, int64_t>> defsyms; // --defsym, as main defines them
 };
 
 // The harness: assembles `source` against a cpu.json as the CLI does and
@@ -130,6 +131,11 @@ inline Bom assembleText(const std::string& source, // NOLINT(bugprone-easily-swa
     Bom built{.machine = std::move(loaded.machine)};
     Assembler assembler(loaded.cpu, built, diagnostics, options.syntax);
     assembler.setVerbose(options.verbose);
+    for (const auto& [name, value] : options.defsyms) {
+        if (!assembler.defineSymbol(name, value)) {
+            diagnostics.systemError("--defsym '" + name + "' is given more than once");
+        }
+    }
     assembler.assemble(source);
     const Bom& bom = assembler.getBom();
     if (!options.format.empty()) {

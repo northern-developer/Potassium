@@ -63,11 +63,11 @@ if $tidy; then
     touch src/*/*.cpp tests/*.cpp
     cmake --build --preset clang-tidy > "$log" 2>&1
     # One count per check, each warning location counted once.
-    counts=$(grep -E '^/.*: warning: .*\[[a-z0-9.,-]+\]$' "$log" \
+    counts=$({ grep -E '^/.*: warning: .*\[[a-z0-9.,-]+\]$' "$log" || true; } \
         | sed -E 's/^([^:]+:[0-9]+:[0-9]+): .*\[([a-z0-9.,-]+)\]$/\1 \2/' \
         | sort -u | awk '{print $2}' | sort | uniq -c | awk '{print $2, $1}')
     if $update_baseline; then
-        echo "$counts" > "$baseline"
+        printf '%s' "${counts:+$counts$'\n'}" > "$baseline"
         echo "wrote $baseline"
     else
         regressions=$(join -a 2 -e 0 -o 0,1.2,2.2 <(sort "$baseline") <(echo "$counts" | sort) \

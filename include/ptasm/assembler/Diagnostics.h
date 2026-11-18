@@ -19,6 +19,10 @@ enum class Category : std::uint8_t {
     advice,   // always a warning: output is still written
 };
 
+// --diagnostics-format: GCC-style text; JSON, one object per line; or
+// one SARIF 2.1.0 log, written when the run ends.
+enum class DiagnosticsFormat : std::uint8_t { text, json, sarif };
+
 struct Diagnostic {
     Category category = Category::source;
     size_t line = 0;   // 1-based; 0 for none (cpu.json and system messages)
@@ -32,7 +36,9 @@ struct Diagnostic {
 // source's by line and column. Assembly keeps going after an error so one
 // run reports them all; the caller checks errorCount() before writing any
 // output. Messages are held until flush() -- called by
-// printFailureSummary() and the destructor, so none is lost.
+// printFailureSummary() and the destructor, so none is lost. JSON and
+// SARIF carry the same messages for tools; the text summary is left out
+// of them, and SARIF's one log is written by the destructor.
 class Diagnostics {
 public:
     explicit Diagnostics(std::ostream& out) : out(&out) {}
@@ -40,10 +46,16 @@ public:
     Diagnostics(Diagnostics&&) = delete;
     Diagnostics& operator=(const Diagnostics&) = delete;
     Diagnostics& operator=(Diagnostics&&) = delete;
-    ~Diagnostics() { flush(); }
+    ~Diagnostics();
 
+    void setFormat(DiagnosticsFormat value) { format = value; }
     void setSourceName(std::string name) { sourceName = std::move(name); }
-    void setConfigName(std::string name) { configName = std::move(name); }
+    // How text names the cpu.json ("-m SAP-1 (path)"), and its path, for
+    // JSON and SARIF.
+    void setConfigName(std::string name, std::string path = "") {
+        configName = std::move(name);
+        configPath = std::move(path);
+    }
     // -w/--warn: encoding and cpu.json problems become warnings.
     void setWarnOnly(bool value) { warnOnly = value; }
 
@@ -80,12 +92,19 @@ private:
     // The policy: which categories are errors.
     [[nodiscard]] bool isError(Category category) const;
     [[nodiscard]] std::string location(const Diagnostic& diagnostic) const;
+    // The file a message is about, for JSON and SARIF; "" for none.
+    [[nodiscard]] std::string fileOf(const Diagnostic& diagnostic) const;
+    void writeJson(const Diagnostic& diagnostic, bool asError) const;
+    void writeSarif() const;
 
     std::ostream* out;
     std::string sourceName = "<source>";
     std::string configName = "<cpu.json>";
+    std::string configPath;
+    DiagnosticsFormat format = DiagnosticsFormat::text;
     bool warnOnly = false;
     int errors = 0;
     int warnings = 0;
     std::vector<std::pair<Diagnostic, bool>> held; // each with whether it's an error
+    std::vector<std::pair<Diagnostic, bool>> sarifResults; // flushed, for the one SARIF log
 };

@@ -81,20 +81,17 @@
          MyBytes =0059
 005C                    MyAscii: .ASCII "done\n"           -- a raw string, no auto-terminator
          MyAscii =005C
-005C  64 6F 6E 65
-0060  0A
+005C  64 6F 6E 65  0A
 0061                    MyAsciz: .ASCIZ "done"             -- like .ASCII, but auto-terminated with a trailing \0
          MyAsciz =0061
-0061  64 6F 6E 65
-0065  00
+0061  64 6F 6E 65  00
 0066  02 01 04 03       MyWord:  .WORD 0x0102, 0x0304      -- 16-bit values, little-endian
          MyWord =0066
 006A  04 03 02 01       MyLong:  .LONG 0x01020304          -- 32-bit values, little-endian (.INT is an accepted alias)
          MyLong =006A
 006E                    MyQuad:  .QUAD 0x0102030405060708  -- 64-bit values, little-endian
          MyQuad =006E
-006E  08 07 06 05
-0072  04 03 02 01
+006E  08 07 06 05  04 03 02 01
 
                         .EXTERN SomeOtherFilesFunction     -- records a symbol expected to be defined elsewhere;
                                                            --   purely informational today (CodeGen::markExtern), same
@@ -122,10 +119,7 @@
 0089  00 00 00          .SPACE 3                           -- three zero bytes
 008C                    Utf8: .ASCIZ "héllo, wörld ✓"      -- UTF-8 in a string keeps its bytes (and in a comment: π ≈ 3.14)
          Utf8 =008C
-008C  68 C3 A9 6C
-0090  6C 6F 2C 20
-0094  77 C3 B6 72
-0098  6C 64 20 E2
+008C  68 C3 A9 6C  6C 6F 2C 20  77 C3 B6 72  6C 64 20 E2
 009C  9C 93 00
 
                         -- AT&T has a scaled-index operand, disp(base, index, scale), that Intel

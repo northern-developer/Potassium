@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <sys/types.h>
 #include <vector>
 
 #include "ptasm/assembler/Bom.h"

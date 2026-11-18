@@ -16,6 +16,8 @@
 #include "ptasm/assembler/Bom.h"
 
 #include "ptasm/writers/ElfWriter.h"
+#include "ptasm/writers/Dwarf.h"
+#include "ptasm/assembler/Diagnostics.h"
 #include <nlohmann/json_fwd.hpp>
 
 #include "harness.h"
@@ -508,4 +510,54 @@ TEST_CASE("A big-endian CPU's ELF is ELFDATA2MSB, every header, symbol and reloc
     CHECK(bigEndian32(image, rela + offsetof(Elf32_Rela, r_offset)) == 0);
     CHECK((bigEndian32(image, rela + offsetof(Elf32_Rela, r_info)) & 0xffU) == 35); // R_OR1K_AHI16
     CHECK(bigEndian32(image, rela + offsetof(Elf32_Rela, r_addend)) == 0x12345);
+}
+
+TEST_CASE("-g: the DWARF sections and their relocations, only when asked for") {
+    const std::string base = PTASM_SOURCE_DIR;
+    const std::string source = base + "/examples/AMD64.asm";
+    const std::string cpu = base + "/machines/AMD64.json";
+    const DebugSource debug{.name = "AMD64.asm", .directory = "/work", .producer = "ptasm test"};
+    const std::map<std::string, SectionHeader> with = readSectionHeaders(runWriter(source, cpu, ElfWriter(debug)));
+    for (const char* name : {".debug_abbrev", ".debug_info", ".debug_line", ".debug_aranges", ".rela.debug_info",
+                             ".rela.debug_line", ".rela.debug_aranges"}) {
+        CAPTURE(name);
+        REQUIRE(with.contains(name));
+    }
+    CHECK(with.at(".debug_line").type == SHT_PROGBITS);
+    CHECK(with.at(".debug_line").flags == 0); // not loaded
+    CHECK(!with.contains(".debug_rnglists")); // one code section: low_pc and high_pc
+}
+
+TEST_CASE("Without -g, no DWARF sections") {
+    const std::string base = PTASM_SOURCE_DIR;
+    const std::map<std::string, SectionHeader> without =
+        readSectionHeaders(runWriter(base + "/examples/AMD64.asm", base + "/machines/AMD64.json", ElfWriter()));
+    CHECK(!without.contains(".debug_info"));
+    CHECK(!without.contains(".debug_line"));
+}
+
+TEST_CASE("-g needs an absolute relocation type for 32-bit offsets and for addresses") {
+    const std::string base = PTASM_SOURCE_DIR;
+    nlohmann::json machine = readJson(base + "/machines/MSP430.json");
+    machine["elf"]["relocations"].erase("addr32");
+    std::string diagnosticsText;
+    const Bom bom = assembleText(readFile(base + "/examples/MSP430.asm"), machine, diagnosticsText);
+    REQUIRE(diagnosticsText.empty());
+    std::ostringstream text;
+    Diagnostics diagnostics(text);
+    ElfWriter(DebugSource{.name = "MSP430.asm"}).check(bom, diagnostics);
+    diagnostics.flush();
+    CHECK(text.str().find("-g needs \"elf\".\"relocations\" to give 'addr32'") != std::string::npos);
+    std::ostringstream quiet;
+    Diagnostics noDebug(quiet);
+    ElfWriter().check(bom, noDebug);
+    noDebug.flush();
+    CHECK(quiet.str().find("-g needs") == std::string::npos);
+}
+
+TEST_CASE("dwarfAddressSize: the address bits rounded up to 2, 4 or 8 bytes") {
+    CHECK(dwarfAddressSize(16) == 2);
+    CHECK(dwarfAddressSize(24) == 4);
+    CHECK(dwarfAddressSize(32) == 4);
+    CHECK(dwarfAddressSize(64) == 8);
 }
