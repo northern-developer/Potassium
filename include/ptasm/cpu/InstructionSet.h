@@ -10,6 +10,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include "ptasm/cpu/Problems.h"
 #include "ptasm/cpu/Form.h"
 
 // The cpu.json instruction encoding format of E2.T2: fields, formats,
@@ -81,7 +82,7 @@ struct OperandValues {
 
 class InstructionSet {
 public:
-    void load(const nlohmann::json& json, std::vector<std::string>& problems);
+    void load(const nlohmann::json& json, Problems& problems);
 
     [[nodiscard]] const Encoding* find(const std::string& mnemonic, const Form& form) const;
     // The same, for a form written as a cpu.json writes it.

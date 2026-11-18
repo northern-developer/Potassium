@@ -10,7 +10,6 @@
 #include <ostream>
 #include <sstream>
 #include <string>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -51,7 +50,7 @@ struct Row {
     std::string source;
 };
 
-std::string byteText(const std::vector<u_char>& data, size_t from, size_t count) {
+std::string byteText(const std::vector<std::uint8_t>& data, size_t from, size_t count) {
     std::string text;
     for (size_t index = from; index < from + count && index < data.size(); ++index) {
         text += (text.empty() ? "" : " ") + hex(data[index], 2);
@@ -137,7 +136,7 @@ private:
         *out << std::string(kSymbolIndent, ' ') << name << ' ' << value << '\n';
     }
     // One row of long data from `from`: wrapBytes bytes, in words.
-    [[nodiscard]] std::string wordText(const std::vector<u_char>& data, size_t from) const {
+    [[nodiscard]] std::string wordText(const std::vector<std::uint8_t>& data, size_t from) const {
         std::string text;
         for (size_t word = from; word < from + wrapBytes && word < data.size(); word += kWordBytes) {
             text += (text.empty() ? "" : "  ") + byteText(data, word, kWordBytes);

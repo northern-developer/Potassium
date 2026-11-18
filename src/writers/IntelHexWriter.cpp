@@ -6,7 +6,6 @@
 #include <ios>
 #include <ostream>
 #include <span>
-#include <sys/types.h>
 #include <vector>
 
 namespace {
@@ -20,17 +19,17 @@ constexpr unsigned int kEndOfFile = 0x01;
 constexpr unsigned int kExtendedLinearAddress = 0x04;
 
 // One record; its checksum is the two's complement of the sum of its bytes.
-void writeHexRecord(std::ostream& out, unsigned int type, unsigned int address, std::span<const u_char> bytes) {
+void writeHexRecord(std::ostream& out, unsigned int type, unsigned int address, std::span<const std::uint8_t> bytes) {
     auto const byteCount = static_cast<unsigned int>(bytes.size());
     unsigned int sum = byteCount + ((address >> kBitsPerByte) & kByteMask) + (address & kByteMask) + type;
-    for (u_char const byte : bytes) {
+    for (std::uint8_t const byte : bytes) {
         sum += static_cast<unsigned int>(byte) & kByteMask;
     }
     unsigned int const checksum = (0x100U - (sum & kByteMask)) & kByteMask;
 
     out << ':' << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << byteCount << std::setw(4)
         << address << std::setw(2) << type;
-    for (u_char const byte : bytes) {
+    for (std::uint8_t const byte : bytes) {
         out << std::setw(2) << (static_cast<unsigned int>(byte) & kByteMask);
     }
     out << std::setw(2) << checksum << std::dec << std::nouppercase << '\n';
@@ -45,8 +44,8 @@ void IntelHexWriter::writeRecords(const std::vector<Record>& records, std::ostre
         uint32_t const recordUpper = record.address >> kLowBits;
         if (recordUpper != upper) {
             upper = recordUpper;
-            std::vector<u_char> const base{static_cast<u_char>(upper >> kBitsPerByte),
-                                           static_cast<u_char>(upper & kByteMask)};
+            std::vector<std::uint8_t> const base{static_cast<std::uint8_t>(upper >> kBitsPerByte),
+                                           static_cast<std::uint8_t>(upper & kByteMask)};
             writeHexRecord(out, kExtendedLinearAddress, 0, base);
         }
         writeHexRecord(out, kData, record.address & kLowMask, record.bytes);

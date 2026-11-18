@@ -12,7 +12,7 @@ AAD $0x0005 # 1 operand, mode 3 (immediate)
 AAE 0x0010 # 1 operand, mode 4 (direct)
 AAF 0x0004(%R2) # 1 operand, mode 5 (indexed)
 .BYTE 0x1A, 0x83, 0x00, 0x04 # no AT&T spelling for: AAG [[R3 + 0x0004]]
-AAH 0x0004(%RIP) # 1 operand, mode 7 (relative)
+AAH 0x0004(%PC) # 1 operand, mode 7 (relative)
 .BYTE 0x23, 0x80, 0x00, 0x04 # no AT&T spelling for: AAI [[PC + 0x0004]]
 
 AAJ %R1, %R0 # 2 operands, load, mode 1 (reg)
@@ -21,7 +21,7 @@ AAL $0x0005, %R0 # 2 operands, load, mode 3 (immediate)
 AAM 0x0010, %R0 # 2 operands, load, mode 4 (direct)
 AAN 0x0004(%R2), %R0 # 2 operands, load, mode 5 (indexed)
 .BYTE 0x3A, 0x98, 0x00, 0x04 # no AT&T spelling for: AAO R0, [[R3 + 0x0004]]
-AAP 0x0004(%RIP), %R0 # 2 operands, load, mode 7 (relative)
+AAP 0x0004(%PC), %R0 # 2 operands, load, mode 7 (relative)
 .BYTE 0x43, 0x80, 0x00, 0x04 # no AT&T spelling for: AAQ R0, [[PC + 0x0004]]
 
 AAR %R0, %R1 # 2 operands, store, mode 1 (reg)
@@ -29,7 +29,7 @@ AAS %R0, (%R1) # 2 operands, store, mode 2 (regindex)
 AAT %R0, 0x0010 # 2 operands, store, mode 4 (direct)
 AAU %R0, 0x0004(%R2) # 2 operands, store, mode 5 (indexed)
 .BYTE 0x56, 0xC3, 0x00, 0x04 # no AT&T spelling for: AAV [[R3 + 0x0004]], R0
-AAW %R0, 0x0004(%RIP) # 2 operands, store, mode 7 (relative)
+AAW %R0, 0x0004(%PC) # 2 operands, store, mode 7 (relative)
 .BYTE 0x5F, 0xC0, 0x00, 0x04 # no AT&T spelling for: AAX [[PC + 0x0004]], R0
 
 AAY %R3, %R2, %R1 # 3 operands, all registers

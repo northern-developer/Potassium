@@ -28,5 +28,5 @@ from `-I`, so the notes always match the machine file.
 **Status:** Assigned (2026-11-12)
 
 Only once the core is a library other tools link against (the QEMU and
-LLVM tools, 0.2:E6 and E7); until then `docs/ARCHITECTURE.md` serves
+LLVM tools, 0.3 and 0.4); until then `docs/ARCHITECTURE.md` serves
 contributors. The `docs` preset exists, but there is no Doxyfile yet.

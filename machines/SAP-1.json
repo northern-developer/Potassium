@@ -3,6 +3,7 @@
   "cpuName": "SAP-1",
   "description": {
     "regCount": 0,
+    "regBits": 8,
     "addressBits": 4,
     "byteOrder": "little"
   },

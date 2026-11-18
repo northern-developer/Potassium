@@ -45,31 +45,29 @@ public:
 
     virtual std::any visitOperand(ptasmParser::OperandContext *context) = 0;
 
+    virtual std::any visitMemory(ptasmParser::MemoryContext *context) = 0;
+
+    virtual std::any visitMemoryIndirect(ptasmParser::MemoryIndirectContext *context) = 0;
+
+    virtual std::any visitAddress(ptasmParser::AddressContext *context) = 0;
+
+    virtual std::any visitAddressTerm(ptasmParser::AddressTermContext *context) = 0;
+
     virtual std::any visitValue(ptasmParser::ValueContext *context) = 0;
 
     virtual std::any visitAddressPart(ptasmParser::AddressPartContext *context) = 0;
 
-    virtual std::any visitRegister(ptasmParser::RegisterContext *context) = 0;
-
-    virtual std::any visitRegisterIndirect(ptasmParser::RegisterIndirectContext *context) = 0;
+    virtual std::any visitRegisterTerm(ptasmParser::RegisterTermContext *context) = 0;
 
     virtual std::any visitExpression(ptasmParser::ExpressionContext *context) = 0;
-
-    virtual std::any visitDirect(ptasmParser::DirectContext *context) = 0;
-
-    virtual std::any visitIndexed(ptasmParser::IndexedContext *context) = 0;
-
-    virtual std::any visitIndexedIndirect(ptasmParser::IndexedIndirectContext *context) = 0;
-
-    virtual std::any visitRelative(ptasmParser::RelativeContext *context) = 0;
-
-    virtual std::any visitRelativeIndirect(ptasmParser::RelativeIndirectContext *context) = 0;
 
     virtual std::any visitAttOperandList(ptasmParser::AttOperandListContext *context) = 0;
 
     virtual std::any visitAttOperand(ptasmParser::AttOperandContext *context) = 0;
 
     virtual std::any visitAttDisplacement(ptasmParser::AttDisplacementContext *context) = 0;
+
+    virtual std::any visitAttReg(ptasmParser::AttRegContext *context) = 0;
 
     virtual std::any visitAttRegister(ptasmParser::AttRegisterContext *context) = 0;
 
@@ -78,8 +76,6 @@ public:
     virtual std::any visitAttImmediate(ptasmParser::AttImmediateContext *context) = 0;
 
     virtual std::any visitAttIndexed(ptasmParser::AttIndexedContext *context) = 0;
-
-    virtual std::any visitAttRelative(ptasmParser::AttRelativeContext *context) = 0;
 
     virtual std::any visitAttScaledIndex(ptasmParser::AttScaledIndexContext *context) = 0;
 

@@ -4,6 +4,57 @@ Notable changes to ptasm, newest first. Each release's full plan is in
 `plan/<V.R>/` (`README.md`, then `README-0m.md` for each later release).
 Versions are V.R.m: V.R is a planned release, m its published updates.
 
+## [0.2.1] -- 2026-11-18
+
+### Added
+- **Machine files that build on others**: `include` lists the files a
+  machine file builds on (an instruction set and its extensions), merged
+  first; `replace` changes what they give, `null` removing a key. A
+  change to an inherited value outside `replace` is an error, as are
+  conflicting values from two includes; a file with no `cpuName` is a
+  fragment, only included. A problem in an included file is reported at
+  that file, and `-MD`'s make rule names every file read.
+- **Models**: named variants of a CPU in one machine file, each a
+  container of the instructions (and fields, formats...) it adds, its
+  own `replace`, and the models it builds on (`base`); `defaultModel`
+  names the one applied.
+- **`-I --origins`**: each instruction with the file and model that
+  defined it, and every file that changed or removed it.
+- **`--dump-machine`**: the machine file as ptasm loaded it, includes
+  merged and its model applied, as JSON.
+- **A register list** in the machine file (`registers`, and
+  `description.regBits`): names for the registers, with their numbers,
+  widths, roles, constants, parts of other registers (`parent`, `lsb`,
+  `writes`), aliases, and registers outside the general ones (`space`,
+  `index`); shown by `-I`, and by `-I --origins` with where each came
+  from.
+- **Register names in source**: `MOV RBX, RDI`, `[RIP + msg]`, `%rax`,
+  in any case, from the CPU's register list; `R<n>` and `PC` keep
+  working on every CPU. Inside brackets the terms may come in any order
+  (`[4 + RBX]`). AMD64 names its registers (`RAX`...`RDI`, `RIP`).
+  A register's name can't be a label, a constant or a symbol, and a
+  register isn't a value.
+- **A grammar for the machine file's strings** (`ptasmMachine.g4`):
+  operand patterns are parsed by it, so spacing no longer matters; an
+  untidily spaced pattern is a warning, and is read in the standard
+  spelling. The same grammar reads semantics, conditions and `becomes`
+  text, for what 0.2 builds next.
+
+### Changed
+- **`RIP` is AMD64's name**, from its register list, no longer a keyword
+  on every CPU; `PC` still is. `TESTCPU-0.s` now writes `%PC`.
+
+### Fixed
+- **A plain `cmake -B build`** configures again; the unused `install`
+  preset (a CMake package export of ptasm's internal library) is gone.
+- **A jump or call to a `.GLOBAL` label in its own section** is
+  relocated on OR1K and RV32I, as their GNU assemblers do, so the linker
+  can bind the label elsewhere; before, only x86's rule (jumps resolved)
+  was applied, to every target, and OR1K's and RV32I's calls weren't
+  relocated either. The new `elf.globalJumps` (`"relocate"`, the
+  default, or `"resolve"`) says which; AMD64, I386 and, for now, MSP430
+  resolve.
+
 ## [0.1.3] -- 2026-11-17
 
 ### Added

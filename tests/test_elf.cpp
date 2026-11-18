@@ -10,7 +10,6 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
-#include <sys/types.h>
 #include <vector>
 
 #include "ptasm/assembler/Bom.h"
@@ -51,7 +50,7 @@ TEST_CASE("A difference of two labels is a constant within a section, an -f elf 
                                  base + "/machines/AMD64.json", diagnosticsText, {.format = "elf"});
     CHECK(diagnosticsText.empty());
     CHECK(sectionRelocations(bom.sections.front()).empty());
-    CHECK(bom.sections.front().lines.back().bytes == std::vector<u_char>{0x48, 0xb8, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    CHECK(bom.sections.front().lines.back().bytes == std::vector<std::uint8_t>{0x48, 0xb8, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
     assembleText(".TEXT\na: RET\n.DATA\nb: .LONG a - b\n", base + "/machines/AMD64.json", diagnosticsText,
                  {.format = "elf"});
     CHECK(diagnosticsText ==
@@ -83,7 +82,7 @@ TEST_CASE("-f elf rejects operands that aren't one label plus constants; other f
     const Bom bom = assembleText(source, base + "/machines/TESTCPU-0.json", diagnosticsText, {.format = "bin"});
     CHECK(diagnosticsText.empty());
     REQUIRE(bom.sections.size() == 1);
-    CHECK(bom.sections.front().lines.at(2).bytes == std::vector<u_char>{0x0d, 0x00, 0x00, 0x02}); // b - a = 2
+    CHECK(bom.sections.front().lines.at(2).bytes == std::vector<std::uint8_t>{0x0d, 0x00, 0x00, 0x02}); // b - a = 2
 }
 
 TEST_CASE("Conventional section names get the right ELF type and flags; .bss stores no bytes") {
@@ -185,6 +184,12 @@ TEST_CASE("elf.relocationFormat must be rela or rel") {
     nlohmann::json cpu = elf32Cpu();
     cpu["elf"]["relocationFormat"] = "relr";
     CHECK(loadProblems(cpu) == std::vector<std::string>{R"(elf: "relocationFormat" must be "rela" or "rel")"});
+}
+
+TEST_CASE("elf.globalJumps must be relocate or resolve") {
+    nlohmann::json cpu = elf32Cpu();
+    cpu["elf"]["globalJumps"] = "keep";
+    CHECK(loadProblems(cpu) == std::vector<std::string>{R"(elf: "globalJumps" must be "relocate" or "resolve")"});
 }
 
 TEST_CASE(".ALIGN is measured from the section's start and sets its ELF alignment") {
@@ -294,9 +299,9 @@ TEST_CASE("AMD64 JE: the short form to a local label, the long one where the lin
     const Bom bom = assembleText(".TEXT\n.EXTERN ext\nJE loc\nJE ext\nJE 0x10\nloc: RET\n",
                                  base + "/machines/AMD64.json", diagnosticsText, {.format = "elf"});
     CHECK(diagnosticsText.empty());
-    const std::vector<u_char> bytes = allBytes(bom); // relocated fields are zeroed by the ELF writer, not here
+    const std::vector<std::uint8_t> bytes = allBytes(bom); // relocated fields are zeroed by the ELF writer, not here
     REQUIRE(bytes.size() == 15);
-    CHECK(std::vector<u_char>(bytes.begin(), bytes.begin() + 4) == std::vector<u_char>{0x74, 0x0c, 0x0f, 0x84});
+    CHECK(std::vector<std::uint8_t>(bytes.begin(), bytes.begin() + 4) == std::vector<std::uint8_t>{0x74, 0x0c, 0x0f, 0x84});
     CHECK(bytes[8] == 0x0f);
     CHECK(bytes[9] == 0x84);
     const std::vector<Relocation>& relocs = sectionRelocations(bom.sections.front());
@@ -322,18 +327,50 @@ TEST_CASE("In -f elf, a jump to a .GLOBAL label relocates; one to a local label 
     CHECK(reloc.offset == 6);
 }
 
-TEST_CASE("A .GLOBAL label in the same section: a jump resolves it, a call or data reference relocates (as GAS)") {
+TEST_CASE("x86, globalJumps resolve: a jump resolves a .GLOBAL label in the same section; a call or data reference relocates (as GAS)") {
     const std::string base = PTASM_SOURCE_DIR;
     std::string diagnosticsText;
     // as 2.46: je g -> 74 0d, no relocation; call g -> PLT32; lea g(%rip) -> PC32.
     const Bom bom = assembleText(".TEXT\n.GLOBAL g\nJE g\nCALL g\nLEA R0, [RIP + g]\ng: RET\n",
                                  base + "/machines/AMD64.json", diagnosticsText, {.format = "elf"});
     CHECK(diagnosticsText.empty());
-    CHECK(bom.sections.front().lines[0].bytes == std::vector<u_char>{0x74, 0x0c}); // the short form, resolved
+    CHECK(bom.sections.front().lines[0].bytes == std::vector<std::uint8_t>{0x74, 0x0c}); // the short form, resolved
     const std::vector<Relocation>& relocs = sectionRelocations(bom.sections.front());
     REQUIRE(relocs.size() == 2);
     CHECK(relocs[0].type == 4); // CALL: R_X86_64_PLT32 ("pcrel32:call")
     CHECK(relocs[1].type == 2); // LEA: R_X86_64_PC32 ("pcrel32")
+}
+
+TEST_CASE("OR1K: a jump, branch or call to a .GLOBAL label in the same section relocates (as GAS)") {
+    const std::string base = PTASM_SOURCE_DIR;
+    std::string diagnosticsText;
+    // or1k-elf-as 2.46: R_OR1K_INSN_REL_26 at 0, 8 and 0x10; none for the local label.
+    const Bom bom = assembleText(".TEXT\n.GLOBAL g\nl.j g\nl.nop\nl.bf g\nl.nop\nl.jal g\nl.nop\n"
+                                 "l.j loc\nl.nop\ng: l.nop\nloc: l.nop\n",
+                                 base + "/machines/OR1K.json", diagnosticsText, {.format = "elf"});
+    CHECK(diagnosticsText.empty());
+    const std::vector<Relocation>& relocs = sectionRelocations(bom.sections.front());
+    REQUIRE(relocs.size() == 3);
+    for (size_t index = 0; index < relocs.size(); ++index) {
+        CHECK(relocs[index].symbol == "g");
+        CHECK(relocs[index].type == 6); // R_OR1K_INSN_REL_26
+        CHECK(relocs[index].offset == index * 8);
+    }
+}
+
+TEST_CASE("RV32I: a jump, branch or call to a .GLOBAL label in the same section relocates (as GAS)") {
+    const std::string base = PTASM_SOURCE_DIR;
+    std::string diagnosticsText;
+    // riscv64-unknown-elf-as 2.46 -mno-relax: R_RISCV_JAL, R_RISCV_BRANCH, R_RISCV_JAL.
+    const Bom bom = assembleText(".TEXT\n.GLOBAL g\nJ g\nBEQ R10, R11, g\nJAL R1, g\nJ loc\ng: NOP\nloc: NOP\n",
+                                 base + "/machines/RV32I.json", diagnosticsText, {.format = "elf"});
+    CHECK(diagnosticsText.empty());
+    const std::vector<Relocation>& relocs = sectionRelocations(bom.sections.front());
+    REQUIRE(relocs.size() == 3);
+    CHECK(relocs[0].type == 17); // R_RISCV_JAL
+    CHECK(relocs[1].type == 16); // R_RISCV_BRANCH
+    CHECK(relocs[2].type == 17);
+    CHECK(relocs[2].offset == 8);
 }
 
 TEST_CASE("A jump to a fixed address is a distance in bin, a symbol-less relocation in -f elf") {
@@ -342,7 +379,7 @@ TEST_CASE("A jump to a fixed address is a distance in bin, a symbol-less relocat
     const std::string source = ".TEXT\nRET\nCALL 0x1000\n";
     Bom bom = assembleText(source, base + "/machines/AMD64.json", diagnosticsText, {.format = "bin"});
     CHECK(diagnosticsText.empty());
-    CHECK(bom.sections.front().lines[1].bytes == std::vector<u_char>{0xe8, 0xfa, 0x0f, 0x00, 0x00}); // 0x1000 - 6
+    CHECK(bom.sections.front().lines[1].bytes == std::vector<std::uint8_t>{0xe8, 0xfa, 0x0f, 0x00, 0x00}); // 0x1000 - 6
     bom = assembleText(source, base + "/machines/AMD64.json", diagnosticsText, {.format = "elf"});
     CHECK(diagnosticsText.empty());
     REQUIRE(sectionRelocations(bom.sections.front()).size() == 1);

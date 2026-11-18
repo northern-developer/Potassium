@@ -1,6 +1,7 @@
 #include "ptasm/assembler/AsmParser.h"
 #include "ptasm/assembler/Bom.h"
 #include "ptasm/assembler/SourceStatement.h"
+#include "ptasm/cpu/Machine.h"
 #include <algorithm>
 #include <any>
 #include <antlr4-runtime.h>
@@ -10,8 +11,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <optional>
 #include <string>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -61,7 +62,7 @@ std::any AsmParser::visitInstruction(ptasmParser::InstructionContext* ctx)  {
     }
     int const address = 0;
     size_t const instructionSize = 0; // filled by later based on opcode
-    std::vector<u_char> const data;
+    std::vector<std::uint8_t> const data;
     std::vector<Operand> args;
 
     // Up to maxOperands comma-separated operands (the active cpu.json's
@@ -94,44 +95,72 @@ std::any AsmParser::visitInstruction(ptasmParser::InstructionContext* ctx)  {
     return "MARK";
 }
 
+// A name a directive or label declares: a register's name can't be one
+// (E1.T1 decision 2).
+std::string AsmParser::declaredName(ptasmParser::NameContext* ctx, const char* what) {
+    std::string name = ctx->NAME()->getText();
+    if (registerNamed(name)) {
+        diagnostics->error(ctx->getStart()->getLine(), "'" + name + "' is a register; it can't be " + what);
+    }
+    return name;
+}
+
+// A value's terms: a register isn't a value (E1.T1 decision 9). Each is
+// reported, and dropped, so it isn't then reported as an undefined name.
+void AsmParser::rejectRegisters(std::vector<Term>& terms, size_t line) {
+    std::erase_if(terms, [&](const Term& term) {
+        if (!registerNamed(term.label)) {
+            return false;
+        }
+        diagnostics->error(line, "'" + term.label + "' is a register; it can't be a value");
+        return true;
+    });
+}
+
+std::vector<Term> AsmParser::valueTerms(ptasmParser::ExpressionContext* ctx) {
+    std::vector<Term> terms = std::any_cast<Operand>(visit(ctx)).terms;
+    rejectRegisters(terms, ctx->getStart()->getLine());
+    return terms;
+}
+
 void AsmParser::handleOrg(ptasmParser::DirectiveContext* ctx) {
     statements.emplace_back(directive::Org{.line = ctx->getStart()->getLine(),
-                                           .terms = std::any_cast<Operand>(visit(ctx->expression())).terms});
+                                           .terms = valueTerms(ctx->expression())});
 }
 
 void AsmParser::handleEqu(ptasmParser::DirectiveContext* ctx) {
     directive::Equ equ{.line = ctx->getStart()->getLine()};
     if (ctx->name() != nullptr) {
-        equ.name = std::any_cast<Term>(visit(ctx->name())).label;
+        equ.name = declaredName(ctx->name(), "a constant");
     }
     if (ctx->expression() != nullptr) {
-        equ.terms = std::any_cast<Operand>(visit(ctx->expression())).terms;
+        equ.terms = valueTerms(ctx->expression());
     }
     statements.emplace_back(std::move(equ));
 }
 
 void AsmParser::handleSet(ptasmParser::DirectiveContext* ctx) {
     statements.emplace_back(directive::Set{.line = ctx->getStart()->getLine(),
-                                           .name = std::any_cast<Term>(visit(ctx->name())).label,
-                                           .terms = std::any_cast<Operand>(visit(ctx->expression())).terms});
+                                           .name = declaredName(ctx->name(), "a constant"),
+                                           .terms = valueTerms(ctx->expression())});
 }
 
 void AsmParser::handleGlobal(ptasmParser::DirectiveContext* ctx) {
     if (ctx->name() != nullptr) {
-        statements.emplace_back(directive::Global{.name = std::any_cast<Term>(visit(ctx->name())).label});
+        statements.emplace_back(directive::Global{.name = declaredName(ctx->name(), "a symbol")});
     }
 }
 
 void AsmParser::handleAlign(ptasmParser::DirectiveContext* ctx) {
     if (ctx->expression() != nullptr) {
         statements.emplace_back(directive::Align{.line = ctx->getStart()->getLine(),
-                                                 .terms = std::any_cast<Operand>(visit(ctx->expression())).terms});
+                                                 .terms = valueTerms(ctx->expression())});
     }
 }
 
 void AsmParser::handleExtern(ptasmParser::DirectiveContext* ctx) {
     if (ctx->name() != nullptr) {
-        statements.emplace_back(directive::Extern{.name = std::any_cast<Term>(visit(ctx->name())).label});
+        statements.emplace_back(directive::Extern{.name = declaredName(ctx->name(), "a symbol")});
     }
 }
 
@@ -153,7 +182,7 @@ void AsmParser::handleSection(ptasmParser::DirectiveContext* ctx) {
 void AsmParser::handleSpace(ptasmParser::DataDirectiveContext* ctx) {
     statements.emplace_back(
         directive::Space{.line = ctx->getStart()->getLine(),
-                         .terms = std::any_cast<Operand>(visit(ctx->expression())).terms});
+                         .terms = valueTerms(ctx->expression())});
 }
 
 std::any AsmParser::visitDirective(ptasmParser::DirectiveContext* ctx)  {
@@ -184,7 +213,7 @@ return child;
 }
 
 std::any AsmParser::visitLabel(ptasmParser::LabelContext* ctx)  {
-    std::string label = std::string(ctx->name()->NAME()->getText());
+    std::string label = declaredName(ctx->name(), "a label");
     statements.emplace_back(directive::Label{.line = ctx->getStart()->getLine(), .name = label});
     return label;
 }
@@ -193,47 +222,184 @@ std::any AsmParser::visitOperandList(ptasmParser::OperandListContext* ctx)  {
 return visitChildren(ctx);
 }
 
+// A bare operand is a register when it is one name that is a register
+// (R<n>, PC, a list name); a register anywhere else in a value is an
+// error (E1.T1 decision 9). In brackets, the terms set the mode.
 std::any AsmParser::visitOperand(ptasmParser::OperandContext* ctx)  {
-return visitChildren(ctx);
+    size_t const line = ctx->getStart()->getLine();
+    if (ctx->memory() != nullptr) {
+        return memoryOperand(ctx->memory()->address(), Brackets::one, line);
+    }
+    if (ctx->memoryIndirect() != nullptr) {
+        return memoryOperand(ctx->memoryIndirect()->address(), Brackets::two, line);
+    }
+    auto data = std::any_cast<Operand>(visit(ctx->value()));
+    if (data.part.empty() && data.terms.size() == 1 && !data.terms.front().negated) {
+        if (std::optional<RegisterRef> const ref = registerNamed(data.terms.front().label)) {
+            return registerOperand(data.terms.front().label, *ref, line);
+        }
+    }
+    std::erase_if(data.terms, [&](const Term& term) {
+        if (!registerNamed(term.label)) {
+            return false;
+        }
+        diagnostics->error(line, "'" + term.label + "' is a register; it can't be part of a value");
+        return true;
+    });
+    return data;
 }
 
-Operand AsmParser::buildRegisterOperand(antlr4::tree::TerminalNode* regToken) {
-    std::string const label = regToken->getText();
+std::optional<AsmParser::RegisterRef> AsmParser::registerNamed(const std::string& text) const {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    std::string const name = toUpper(text);
+    bool const numbered = name.size() > 1 && name.front() == 'R' &&
+                          std::ranges::all_of(name.substr(1), [](char digit) { return digit >= '0' && digit <= '9'; });
+    if (numbered) {
+        RegisterRef ref;
+        try {
+            ref.number = std::stoi(name.substr(1));
+        } catch (const std::exception&) {
+            ref.number = -1; // too large for an int: reported as out of range
+        }
+        return ref;
+    }
+    if (registers != nullptr) {
+        for (size_t index = 0; index < registers->size(); ++index) {
+            const Register& entry = (*registers)[index];
+            if (toUpper(entry.name) == name) {
+                return RegisterRef{.number = entry.number,
+                                   .entry = static_cast<uint16_t>(index),
+                                   .pc = entry.role == "pc",
+                                   .inSpace = !entry.space.empty()};
+            }
+        }
+    }
+    if (name == "PC") {
+        return RegisterRef{.pc = true};
+    }
+    return std::nullopt;
+}
+
+Operand AsmParser::registerOperand(const std::string& text, const RegisterRef& ref, size_t line) {
     Operand data;
     data.type = ArgType::reg;
-    data.label = label;
-    try{
-        data.value = std::stoi(label.substr(1));
+    data.label = text;
+    data.regEntry = ref.entry;
+    if (ref.inSpace) {
+        diagnostics->error(line, "'" + text + "' is outside the general registers; it can't be an operand yet");
+    } else if (!ref.number) {
+        diagnostics->error(line, "'" + text + "' is the program counter; here it isn't a general register");
+    } else {
+        data.value = *ref.number;
     }
-    catch (const std::exception&){
-        diagnostics->error(regToken->getSymbol()->getLine(), "invalid register number '" + label + "'");
-    }
-
-return data;
+    return data;
 }
 
-std::any AsmParser::visitRegister(ptasmParser::RegisterContext* ctx)  {
-    return buildRegisterOperand(ctx->REG());
+// A bracketed operand's terms, sorted: the registers in it, its numbers
+// and labels (each with its sign), and its address part.
+void AsmParser::collectAddress(ptasmParser::AddressContext* address, size_t line, AddressTerms& terms) {
+    bool minus = false;
+    for (antlr4::tree::ParseTree* child : address->children) {
+        auto* const term = dynamic_cast<ptasmParser::AddressTermContext*>(child);
+        if (term == nullptr) {
+            std::string const text = child == nullptr ? std::string() : child->getText();
+            if (text == "+" || text == "-") {
+                minus = text == "-";
+            }
+            continue;
+        }
+        addAddressTerm(term, minus != hasMinusOperator(term), line, terms);
+        minus = false;
+    }
 }
 
-std::any AsmParser::visitRegisterIndirect(ptasmParser::RegisterIndirectContext* ctx)  {
-    auto data = buildRegisterOperand(ctx->REG());
-    data.type = ArgType::registerIndirect;
-return data;
+void AsmParser::addAddressTerm(ptasmParser::AddressTermContext* term, bool negated, size_t line,
+                               AddressTerms& terms) {
+    if (term->addressPart() != nullptr) {
+        auto const written = std::any_cast<Operand>(visit(term->addressPart()));
+        if (!terms.part.empty()) {
+            diagnostics->error(line, "an operand holds one address part");
+        }
+        terms.part = written.part;
+        for (Term value : written.terms) {
+            value.negated = terms.values.empty() && negated ? !value.negated : value.negated;
+            terms.values.push_back(value);
+        }
+        return;
+    }
+    Term value = termOf(term->registerTerm(), term->name(), term->number());
+    if (std::optional<RegisterRef> const ref = registerNamed(value.label)) {
+        if (negated) {
+            diagnostics->error(line, "'" + value.label + "' is a register; it can't be subtracted");
+        }
+        terms.registers.emplace_back(*ref, value.label);
+        return;
+    }
+    value.negated = negated;
+    terms.values.push_back(value);
+    ++terms.plainTerms;
+}
+
+// The mode, from which of the terms are registers.
+Operand AsmParser::memoryOperand(ptasmParser::AddressContext* address, Brackets brackets, size_t line) {
+    AddressTerms terms;
+    collectAddress(address, line, terms);
+    bool const indirect = brackets == Brackets::two;
+    if (!terms.part.empty() && terms.plainTerms > 0) {
+        diagnostics->error(line, "an address part can't be added to other numbers in one operand");
+    }
+    if (terms.registers.size() > 1) {
+        diagnostics->error(line, "two registers in one operand (an index register is AT&T's disp(base, index, scale))");
+    }
+    Operand data;
+    if (terms.registers.empty()) {
+        if (indirect) {
+            diagnostics->error(line, "[[...]] needs a register or PC inside");
+        }
+        data.type = ArgType::direct;
+    } else if (const auto& [ref, text] = terms.registers.front(); ref.pc && !ref.number) {
+        if (terms.values.empty()) {
+            diagnostics->error(line, "'[" + text + "]' needs a distance: [" + text + " + 0]");
+        }
+        data.type = indirect ? ArgType::relativeIndirect : ArgType::relative;
+    } else {
+        data = registerOperand(text, ref, line);
+        if (terms.values.empty() && terms.part.empty()) {
+            if (indirect) {
+                diagnostics->error(line, "[[" + text + "]] isn't an addressing mode; [[" + text + " + 0]] is");
+            }
+            data.type = ArgType::registerIndirect;
+        } else {
+            data.type = indirect ? ArgType::indexedIndirect : ArgType::indexed;
+        }
+    }
+    data.terms = std::move(terms.values);
+    data.part = std::move(terms.part);
+    return data;
+}
+
+// A register, name or number term as a Term.
+Term AsmParser::termOf(ptasmParser::RegisterTermContext* registerTerm, ptasmParser::NameContext* name,
+                       ptasmParser::NumberContext* number) {
+    if (registerTerm != nullptr) {
+        return std::any_cast<Term>(visit(registerTerm));
+    }
+    if (name != nullptr) {
+        return std::any_cast<Term>(visit(name));
+    }
+    return std::any_cast<Term>(visit(number));
+}
+
+std::any AsmParser::visitRegisterTerm(ptasmParser::RegisterTermContext* ctx) {
+    return Term{.label = ctx->getText(), .value = 0};
 }
 
 bool AsmParser::hasMinusOperator(antlr4::ParserRuleContext* ctx) {
     return std::ranges::any_of(ctx->children, [](antlr4::tree::ParseTree* child) {
         return dynamic_cast<antlr4::tree::TerminalNode*>(child) != nullptr && child->getText() == "-";
     });
-}
-
-Operand AsmParser::bracketedValue(antlr4::ParserRuleContext* ctx, ptasmParser::ValueContext* value) {
-    auto data = std::any_cast<Operand>(visit(value));
-    if (hasMinusOperator(ctx) && !data.terms.empty()) {
-        data.terms.front().negated = !data.terms.front().negated;
-    }
-    return data;
 }
 
 std::any AsmParser::visitValue(ptasmParser::ValueContext* ctx) {
@@ -261,60 +427,52 @@ std::any AsmParser::visitExpression(ptasmParser::ExpressionContext* ctx)  {
     if (ctx->expression() != nullptr) {
         data.terms = std::any_cast<Operand>(visit(ctx->expression())).terms;
     }
-    Term term = ctx->name() != nullptr ? std::any_cast<Term>(visit(ctx->name()))
-                                       : std::any_cast<Term>(visit(ctx->number()));
+    Term term = termOf(ctx->registerTerm(), ctx->name(), ctx->number());
     term.negated = hasMinusOperator(ctx);
     data.terms.push_back(term);
     return data;
 }
 
-std::any AsmParser::visitDirect(ptasmParser::DirectContext* ctx)  {
-    auto data = std::any_cast<Operand>(visit(ctx->value()));
-    data.type = ArgType::direct;
-    return data;
-}
+// AT&T addressing modes: the register in each is an attReg (%R5, %PC,
+// %name), resolved as Intel's bare name is; only the shape around it
+// differs per mode.
 
-std::any AsmParser::visitIndexed(ptasmParser::IndexedContext* ctx)  {
-    auto data = buildRegisterOperand(ctx->REG());
-    Operand const number = bracketedValue(ctx, ctx->value());
-    data.terms = number.terms;
-    data.part = number.part;
-    data.type = ArgType::indexed;
-    return data;
+// %name: a register, by the same rule as Intel's bare name (E1.T1
+// decision 7); an unknown name is an error.
+std::any AsmParser::visitAttReg(ptasmParser::AttRegContext* ctx) {
+    std::string const text = ctx->getText().substr(1);
+    size_t const line = ctx->getStart()->getLine();
+    std::optional<RegisterRef> const ref = registerNamed(text);
+    if (!ref) {
+        diagnostics->error(line, "'%" + text + "' isn't a register");
+        Operand data;
+        data.type = ArgType::reg;
+        data.label = text;
+        return data;
+    }
+    if (ref->pc && !ref->number) {
+        Operand data; // the pc: only disp(%pc) uses it
+        data.type = ArgType::relative;
+        data.label = text;
+        return data;
+    }
+    return registerOperand(text, *ref, line);
 }
-
-std::any AsmParser::visitIndexedIndirect(ptasmParser::IndexedIndirectContext* ctx)  {
-    auto data = buildRegisterOperand(ctx->REG());
-    Operand const number = bracketedValue(ctx, ctx->value());
-    data.terms = number.terms;
-    data.part = number.part;
-    data.type = ArgType::indexedIndirect;
-    return data;
-}
-
-std::any AsmParser::visitRelative(ptasmParser::RelativeContext* ctx)  {
-    Operand data = bracketedValue(ctx, ctx->value());
-    data.type = ArgType::relative;
-    return data;
-}
-
-std::any AsmParser::visitRelativeIndirect(ptasmParser::RelativeIndirectContext* ctx)  {
-    Operand data = bracketedValue(ctx->relative(), ctx->relative()->value());
-    data.type = ArgType::relativeIndirect;
-    return data;
-}
-
-// AT&T addressing modes. `REG` itself is the
-// same shared leaf Intel's own visitRegister/visitRegisterIndirect/
-// visitIndexed above already use via buildRegisterOperand -- only the
-// sigil/bracket shape wrapping it differs per mode.
 
 std::any AsmParser::visitAttRegister(ptasmParser::AttRegisterContext* ctx)  {
-    return buildRegisterOperand(ctx->REG());
+    auto data = std::any_cast<Operand>(visit(ctx->attReg()));
+    if (data.type == ArgType::relative) {
+        diagnostics->error(ctx->getStart()->getLine(), "'%" + data.label + "' is the program counter; use it as disp(%" + data.label + ")");
+        data.type = ArgType::reg;
+    }
+    return data;
 }
 
 std::any AsmParser::visitAttRegisterIndirect(ptasmParser::AttRegisterIndirectContext* ctx)  {
-    auto data = buildRegisterOperand(ctx->REG());
+    auto data = std::any_cast<Operand>(visit(ctx->attReg()));
+    if (data.type == ArgType::relative) {
+        diagnostics->error(ctx->getStart()->getLine(), "(%" + data.label + ") needs a distance: 0(%" + data.label + ")");
+    }
     data.type = ArgType::registerIndirect;
     return data;
 }
@@ -337,21 +495,20 @@ std::any AsmParser::visitAttIndexed(ptasmParser::AttIndexedContext* ctx)  {
     // visitIndexed (register in value, displacement in terms),
     // just a different textual shape (displacement before the parens,
     // not inside brackets with the register).
-    auto data = buildRegisterOperand(ctx->REG());
+    // With the program counter, "disp(%rip)" is relative, the same Operand
+    // as Intel's [RIP + disp].
+    auto data = std::any_cast<Operand>(visit(ctx->attReg()));
     auto const displacement = std::any_cast<Operand>(visit(ctx->attDisplacement()));
+    if (data.type == ArgType::relative) {
+        Operand relative;
+        relative.terms = displacement.terms;
+        relative.part = displacement.part;
+        relative.type = ArgType::relative;
+        return relative;
+    }
     data.terms = displacement.terms;
     data.part = displacement.part;
     data.type = ArgType::indexed;
-    return data;
-}
-
-std::any AsmParser::visitAttRelative(ptasmParser::AttRelativeContext* ctx)  {
-    // "disp(%rip)" -> relative, the same Operand as Intel's [RIP + disp].
-    Operand data;
-    auto const displacement = std::any_cast<Operand>(visit(ctx->attDisplacement()));
-    data.terms = displacement.terms;
-    data.part = displacement.part;
-    data.type = ArgType::relative;
     return data;
 }
 
@@ -359,7 +516,7 @@ std::any AsmParser::visitAttIndirectTarget(ptasmParser::AttIndirectTargetContext
     // "*%reg" -- AT&T's explicit indirect jump/call target marker, not
     // its own ArgType: resolves to the same regindex meaning a bare
     // "(%reg)" already has.
-    auto data = buildRegisterOperand(ctx->REG());
+    auto data = std::any_cast<Operand>(visit(ctx->attReg()));
     data.type = ArgType::registerIndirect;
     return data;
 }
@@ -370,13 +527,13 @@ std::any AsmParser::visitAttScaledIndex(ptasmParser::AttScaledIndexContext* ctx)
     // visitAttIndexed does; index+scale reuses the same shape, carrying
     // the raw scale (1/2/4/8) in terms -- Encoder::writeField does the
     // log2. Returned as a std::vector<Operand>; see visitAttOperand.
-    Operand base = buildRegisterOperand(ctx->REG(0));
+    auto base = std::any_cast<Operand>(visit(ctx->attReg(0)));
     auto const displacement = std::any_cast<Operand>(visit(ctx->attDisplacement()));
     base.terms = displacement.terms;
     base.part = displacement.part;
     base.type = ArgType::indexed;
 
-    Operand indexAndScale = buildRegisterOperand(ctx->REG(1));
+    auto indexAndScale = std::any_cast<Operand>(visit(ctx->attReg(1)));
     auto const scale = std::any_cast<Term>(visit(ctx->number()));
     indexAndScale.terms = {scale};
     indexAndScale.type = ArgType::indexed;
@@ -430,7 +587,7 @@ std::any AsmParser::visitAttInstruction(ptasmParser::AttInstructionContext* ctx)
     }
     int const address = 0;
     size_t const instructionSize = 0; // filled in later, based on the opcode
-    std::vector<u_char> const data;
+    std::vector<std::uint8_t> const data;
 
     // AT&T's operand order is src, dst -- the reverse of the Intel
     // order Assembler and the Encoder are built against -- so it is reversed here,
@@ -520,8 +677,8 @@ std::any AsmParser::visitMnemonic(ptasmParser::MnemonicContext* ctx)  {
 return mnemonic;
 }
 
-std::vector<u_char> AsmParser::decodeStringLiteral(const std::string& rawMatchedText) {
-    std::vector<u_char> data;
+std::vector<std::uint8_t> AsmParser::decodeStringLiteral(const std::string& rawMatchedText) {
+    std::vector<std::uint8_t> data;
     if (rawMatchedText.size() < 2) {
         return data;
     }
@@ -538,11 +695,11 @@ std::vector<u_char> AsmParser::decodeStringLiteral(const std::string& rawMatched
                 case 'r': data.push_back('\r'); break;
                 case '0': data.push_back('\0'); break;
                 case '\\': data.push_back('\\'); break;
-                default: data.push_back(static_cast<u_char>(content[i])); break;
+                default: data.push_back(static_cast<std::uint8_t>(content[i])); break;
             }
         }
         else {
-            data.push_back(static_cast<u_char>(content[i]));
+            data.push_back(static_cast<std::uint8_t>(content[i]));
         }
     }
     return data;
@@ -554,7 +711,7 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
         return nullptr;
     }
     if (ctx->STRING() != nullptr) {
-        std::vector<u_char> data = decodeStringLiteral(ctx->STRING()->toString());
+        std::vector<std::uint8_t> data = decodeStringLiteral(ctx->STRING()->toString());
         if (ctx->DATA_STRINGZ() != nullptr) {
             data.push_back(0); // .ASCIZ: auto-terminated, unlike .ASCII
         }
@@ -585,7 +742,9 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
         }
         std::vector<Operand> items;
         for (ptasmParser::ExpressionContext* itemCtx : ctx->expressionList()->expression()) {
-            items.push_back(std::any_cast<Operand>(visitExpression(itemCtx)));
+            auto item = std::any_cast<Operand>(visitExpression(itemCtx));
+            rejectRegisters(item.terms, itemCtx->getStart()->getLine());
+            items.push_back(std::move(item));
         }
         size_t const size = items.size() * static_cast<size_t>(slotBytes);
         Statement const line{.kind = Data{.slotBytes = slotBytes,
@@ -593,7 +752,7 @@ std::any AsmParser::visitDataDirective(ptasmParser::DataDirectiveContext* ctx)  
                                           .operands = items},
                            .address = 0,
                            .size = size,
-                           .bytes = std::vector<u_char>(size, 0),
+                           .bytes = std::vector<std::uint8_t>(size, 0),
                            .lineNumber = statementLine(ctx)};
         statements.emplace_back(line);
     }
@@ -601,7 +760,7 @@ return visitChildren(ctx);
 }
 
 std::any AsmParser::visitByteList(ptasmParser::ByteListContext* ctx)  {
-    std::vector<u_char> data;
+    std::vector<std::uint8_t> data;
     char* endPtr = nullptr; // NOLINT(misc-const-correctness) -- strtol requires char**, not const char**
     // Iterate only the BYTE terminals, not ctx->children -- the grammar's
     // `bytelist: BYTE ( WS? ',' WS? BYTE )*` means children also includes

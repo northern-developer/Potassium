@@ -1,12 +1,15 @@
 #pragma once
+#include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "nlohmann/json.hpp"
 
 #include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/cpu/InstructionSet.h"
 #include "ptasm/cpu/Machine.h"
+#include "ptasm/cpu/MachineFile.h"
 
 // The operand-count limit's valid range (cpu.json "maxOperands"). The
 // upper bound is one ASCII digit, as the "op<N>" operand names allow; the
@@ -35,6 +38,18 @@ private:
 struct LoadedCpu {
 	Cpu cpu;
 	Machine machine;
+	// Every machine file read, the -m file first, then its includes (-MD).
+	std::vector<std::string> files;
+	// What each instruction's and register's definition went through
+	// (-I --origins).
+	std::map<std::string, std::vector<Change>> history;
+	std::map<std::string, std::vector<Change>> registerHistory;
+	// The file's models, and the one applied ("" for its globals alone).
+	std::vector<std::string> models;
+	std::string model;
+	// The machine file as loaded: includes merged, the model applied
+	// (--dump-machine).
+	nlohmann::json json;
 };
 
 // Reads a parsed cpu.json, reporting every problem through
@@ -42,9 +57,11 @@ struct LoadedCpu {
 // is usable either way.
 LoadedCpu loadCpu(const nlohmann::json& json, Diagnostics& diagnostics);
 
-// Reads a cpu.json file. Nothing only when it can't be used at all
-// (unreadable, a directory, invalid JSON), reported as configFatal.
-std::optional<LoadedCpu> loadCpuFile(const std::string& path, Diagnostics& diagnostics);
+// Reads a cpu.json file and the files it includes (readMachineFile).
+// Nothing only when it can't be used at all (unreadable, a directory,
+// invalid JSON, an include cycle, a fragment), reported as configFatal.
+std::optional<LoadedCpu> loadCpuFile(const std::string& path, Diagnostics& diagnostics,
+                                     const std::optional<std::string>& model = std::nullopt);
 
 // The CPU's header always prints; the per-mnemonic form listing only
 // when listForms is true (--isa).

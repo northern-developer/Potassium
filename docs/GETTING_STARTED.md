@@ -68,7 +68,9 @@ breakage sitting in them.
 
 ### Regenerating the parser
 
-Needed only after editing `src/grammar/ptasm.g4`. Requires a JRE (e.g.
+Needed only after editing a grammar, `src/grammar/ptasm.g4` (the source
+language) or `src/grammar/ptasmMachine.g4` (the strings inside a
+machine file). Requires a JRE (e.g.
 `sudo apt install default-jre-headless`):
 
 ```sh

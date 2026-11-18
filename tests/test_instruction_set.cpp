@@ -15,6 +15,7 @@
 
 #include "ptasm/cpu/Form.h"
 #include "ptasm/cpu/InstructionSet.h"
+#include "ptasm/cpu/Problems.h"
 
 namespace {
 
@@ -27,7 +28,11 @@ Json readJson(const std::string& relativePath) {
 
 ptasm::InstructionSet loadSet(const Json& json, std::vector<std::string>& problems) {
     ptasm::InstructionSet set;
-    set.load(json, problems);
+    Problems found;
+    set.load(json, found);
+    for (const Problem& problem : found) {
+        problems.push_back(problem.message);
+    }
     return set;
 }
 

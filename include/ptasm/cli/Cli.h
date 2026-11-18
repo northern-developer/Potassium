@@ -28,6 +28,8 @@ struct Options {
 	bool warnOnly = false;
 	DiagnosticsFormat diagnosticsFormat = DiagnosticsFormat::text;
 	bool isa = false;
+	bool origins = false;     // -I --origins: where each instruction was defined and changed
+	bool dumpMachine = false; // --dump-machine: the machine file as loaded, as JSON
 	bool pad = false;
 	bool debug = false; // -g
 	// --defsym NAME=value, in the order given.

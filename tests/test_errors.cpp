@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <sstream>
 #include <string>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -272,7 +271,7 @@ TEST_CASE("--defsym: a constant as .EQU makes; the source can't define it again"
     Bom const bom = assembleText("start:\n    addi r1, r0, LIMIT\n    addi r2, r0, NEG\n", cpu, diagnosticsText,
                                  {.defsyms = limit});
     CHECK(diagnosticsText.empty());
-    CHECK(allBytes(bom) == std::vector<u_char>{0x93, 0x00, 0xf0, 0x7f, 0x13, 0x01, 0xb0, 0xff});
+    CHECK(allBytes(bom) == std::vector<std::uint8_t>{0x93, 0x00, 0xf0, 0x7f, 0x13, 0x01, 0xb0, 0xff});
 
     assembleText("LIMIT .EQU 4\n", cpu, diagnosticsText, {.defsyms = limit});
     CHECK(diagnosticsText == "test.asm:1: error: 'LIMIT' is already defined by --defsym\n");

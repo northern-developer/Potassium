@@ -27,7 +27,7 @@ void BinWriter::write(const Bom& bom, std::ostream& out) const {
             baseAddress = std::min(baseAddress, block.address);
         }
     }
-    // char, not u_char: ostream::write wants a const char*.
+    // char, not std::uint8_t: ostream::write wants a const char*.
     std::vector<char> buffer;
     for (Section const& block : bom.sections) {
         placeBytes(block, baseAddress, buffer);

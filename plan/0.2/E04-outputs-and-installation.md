@@ -9,6 +9,7 @@ Make ptasm installable and its outputs richer.
 ## Tickets
 
 - T1: Source-line debug information (`-g`) -- Completed (0.1.3), 2026-11-17.
+- T2: Jumps to a `.GLOBAL` label, relocated as each target's assembler does -- Completed (0.2.1), 2026-11-17.
 
 ## Addenda
 
@@ -26,9 +27,8 @@ Today `-m`'s bare names resolve to a path compiled in from the source tree; an i
 
 ### A4: A ptasm linker
 
-**Status:** Assigned
-
-For relocations a CPU needs that generic ELF types can't express.
+**Status:** Dropped (2026-11-17) -- moved to the wish list, then to
+E12.A4, the linking Epic.
 
 ### A5: `--list-machines`
 
@@ -50,7 +50,8 @@ Messages as JSON or SARIF, for IDEs and CI annotations, beside today's GCC-style
 
 ### A8: A man page
 
-**Status:** Assigned (2026-11-12)
+**Status:** Assigned (2026-11-12) -- at the end of 0.2, once the
+command line settles (2026-11-17).
 
 `ptasm.1`, generated from `docs/SPEC.md`'s option table and installed with the binary.
 
@@ -72,3 +73,12 @@ the whole chain. DWARF register numbers come from the register list
 
 A listing written with `-l -` landed in a file named `-`, committed by
 mistake with A2 and removed before the 0.1.3 release. GNU tools read `-` as stdout; ptasm now does too.
+
+### A11: ELF header flags
+
+**Status:** Assigned (from the survey of existing CPUs, 2026-11-17)
+
+`e_flags` from the machine file, by name and value
+(`"flags": { "EF_OR1K_NODELAY": 1 }`), set when the model they
+describe applies (OR1K without delay slots). Today `e_flags` is always
+0.

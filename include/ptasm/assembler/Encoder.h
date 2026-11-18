@@ -57,6 +57,7 @@ private:
 	               const std::function<void(uint64_t)>& store);
 	// Bytes from the line's start to the field's first byte, in memory order.
 	[[nodiscard]] int fieldStartOffset(int lsb, int bits, const Statement& line) const;
+	[[nodiscard]] bool resolvesGlobalJump(ptasm::Target target) const;
 public:
     void setCpu(const Cpu& value, const Machine& machineValue) {
         cpu = &value;

@@ -6,7 +6,6 @@
 #include <ios>
 #include <ostream>
 #include <span>
-#include <sys/types.h>
 #include <vector>
 
 namespace {
@@ -21,20 +20,20 @@ constexpr uint64_t k24BitEnd = uint64_t{1} << 24U;
 // One record; its checksum is the one's complement of the sum of its
 // bytes, unlike Intel HEX's two's complement.
 void writeSRecord(std::ostream& out, char type, unsigned int addressBytes, uint32_t address,
-                  std::span<const u_char> bytes) {
+                  std::span<const std::uint8_t> bytes) {
     auto const byteCount = static_cast<unsigned int>(bytes.size()) + addressBytes + 1;
     unsigned int sum = byteCount;
     for (unsigned int index = 0; index < addressBytes; ++index) {
         sum += (address >> (index * kBitsPerByte)) & kByteMask;
     }
-    for (u_char const byte : bytes) {
+    for (std::uint8_t const byte : bytes) {
         sum += static_cast<unsigned int>(byte) & kByteMask;
     }
     unsigned int const checksum = 0xFFU - (sum & kByteMask);
 
     out << 'S' << type << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << byteCount
         << std::setw(static_cast<int>(addressBytes * 2)) << address;
-    for (u_char const byte : bytes) {
+    for (std::uint8_t const byte : bytes) {
         out << std::setw(2) << (static_cast<unsigned int>(byte) & kByteMask);
     }
     out << std::setw(2) << checksum << std::dec << std::nouppercase << '\n';

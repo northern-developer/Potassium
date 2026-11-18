@@ -18,7 +18,7 @@ change goes).
 
 ## Design first
 
-A change to the grammar (`src/grammar/ptasm.g4`) or to the core data
+A change to a grammar (`src/grammar/ptasm.g4`, `ptasmMachine.g4`) or to the core data
 model (`Statement`, `Bom`), or anything else load-bearing, starts as a
 written design that's agreed before any code: open an issue describing
 it. Small, additive, backward-compatible changes -- a new directive, a

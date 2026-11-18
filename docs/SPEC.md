@@ -35,12 +35,14 @@ ptasm --list-machines
 | `--diagnostics-format text\|json\|sarif` | How warnings and errors are written (§9.3): GCC-style text, JSON (one object per line) or one SARIF 2.1.0 log. | `text` |
 | `-v`, `--verbose` | Print the CPU header, internal trace output, a summary of the effective settings and `Done.`. Never changes what counts as an error. | off |
 | `-I`, `--isa` | Print the cpu.json's CPU header and every supported mnemonic/operand combination, then exit. | — |
+| `--origins` | With `-I`: each form with the machine file (and model) that defined its instruction, and every file that changed or removed it; then the instructions a later file or model removed (§6.1). | off |
+| `--dump-machine` | Print `-m`'s machine file as ptasm loaded and checked it: includes merged, its model applied, as JSON. Then exit; no source needed. | -- |
 | `-p`, `--pad` | `-f bin` only: zero-fill from address 0 up to the lowest section address. | off |
 | `-g` | `-f elf` only (with another format it is an error): add DWARF 5 source-line information (§8.4), so a debugger can map addresses to source lines. | off |
-| `--defsym NAME=value` | Define a constant, as `NAME .EQU value` would before the first line (§2.4). `value` is a decimal or `0x` number, optionally negative; `NAME` is spelled as in the source and can't be a register (`R<n>`, `PC`, `RIP`). Repeatable; the same name twice is an error. | -- |
-| `-MD` | Also write a make rule naming the files the run read: `output: source machine-file`, spaces and `#` escaped with `\`, `$` as `$$`. Written only when the output is. | off |
+| `--defsym NAME=value` | Define a constant, as `NAME .EQU value` would before the first line (§2.4). `value` is a decimal or `0x` number, optionally negative; `NAME` is spelled as in the source and can't be a register (`R<n>`, `PC`, `RIP`, or a name in the CPU's register list). Repeatable; the same name twice is an error. | -- |
+| `-MD` | Also write a make rule naming the files the run read: `output: source machine-file included-files...` (§6.1), spaces and `#` escaped with `\`, `$` as `$$`. Written only when the output is. | off |
 | `-MF path` | With `-MD`: the rule's file; `-` for stdout. Without `-MD` it is an error, and `-MD` with `-o -` needs it. | the output's path with its extension replaced by `.d` |
-| `--list-machines` | Print each folder a bare `-m` name is looked up in, in order (`$PTASM_MACHINES` if set, the installed folder, the source tree's), marked "(not found)" if missing, then the machine files in it (those with a `cpuName`), each with its `cpuName`; a name an earlier folder already has is marked "(shadowed by ...)". Then exit; no source needed. | -- |
+| `--list-machines` | Print each folder a bare `-m` name is looked up in, in order (`$PTASM_MACHINES` if set, the installed folder, the source tree's), marked "(not found)" if missing, then the machine files in it (those with a `cpuName`, after their includes are merged, §6.1), each with its `cpuName`; a name an earlier folder already has is marked "(shadowed by ...)". Then exit; no source needed. | -- |
 | `-h`, `--help` | Usage. | — |
 | `--version` | Print `ptasm` and its version (e.g. `ptasm 0.1.3`), then exit. | — |
 
@@ -88,9 +90,14 @@ A comment starts with `;`, `--` or `#` and runs to the end of the line.
 - **Case**: keywords, directive names, register names and mnemonics are
   case-insensitive (mnemonics are upper-cased before lookup).
 - **Names**: `[_A-Za-z][_A-Za-z0-9.]*`.
-- **Registers**: `R` followed by decimal digits; `R0` to `R<regCount-1>`
-  (§6.1). `PC` and `RIP` name the program counter, used only in relative
-  operands.
+- **Registers**: `R` followed by decimal digits, `R0` to `R<regCount-1>`,
+  on every CPU (§6.2); and the names in the machine file's register
+  list (§6.2), case-insensitive (`RAX`, `rax`). `PC` names the program
+  counter on every CPU, and a list entry with the `pc` role (AMD64's
+  `RIP`) names it too. A register's name can't be a label, a constant
+  (`.EQU`, `.SET`, `--defsym`) or a `.GLOBAL`/`.EXTERN` symbol, and a
+  register isn't a value (`.QUAD RAX`, `.EQU RAX + 1`, `RAX + 2` as an
+  operand are errors).
 - **Numbers**: decimal (`42`) or hexadecimal with `0x` (`0x2A`); always
   non-negative magnitudes, parsed as unsigned 64-bit and stored as
   `int64_t` two's complement. A literal over 64 bits is an error.
@@ -150,28 +157,31 @@ when the expression is an address (§6.5).
 
 | Operand | Mode | Internal `ArgType` |
 |---|---|---|
-| `R3` | `reg` | `reg` |
+| `R3`, `RBX` (a register) | `reg` | `reg` |
 | `[R3]` | `[reg]` | `registerIndirect` |
 | `expr` | `imm` | `immediate` |
 | `[expr]` | `[imm]` | `direct` |
 | `[R3 ± expr]` | `[reg + imm]` | `indexed` |
 | `[[R3 ± expr]]` | `[[reg + imm]]` | `indexedIndirect` |
-| `[PC ± expr]` / `[RIP ± expr]` | `[pc + imm]` | `relative` |
+| `[PC ± expr]`, `[RIP ± expr]` (the program counter) | `[pc + imm]` | `relative` |
 | `[[PC ± expr]]` | `[[pc + imm]]` | `relativeIndirect` |
 
-In a bracketed form, `-` applies to the expression's first term
-(`[R2 - 4 + 8]` is R2 + 4).
+Inside brackets the terms may come in any order (`[4 + RBX]`,
+`[msg + RIP]`), and each takes the sign before it (`[R2 - 4 + 8]` is
+R2 + 4); which term is a register sets the mode. A register can't be
+subtracted; two registers in one Intel operand, `[[reg]]` and
+`[[expr]]` are errors.
 
 ### 3.3 AT&T operand forms
 
 | Operand | Mode |
 |---|---|
-| `%R3` | `reg` |
+| `%R3`, `%rbx` (a register) | `reg` |
 | `(%R3)` or `*%R3` | `[reg]` |
 | `$expr` | `imm` |
 | `expr` (bare) | `[imm]`; but `imm`, the target itself, where that is what a call or jump takes (below) |
 | `disp(%R3)` | `[reg + imm]` |
-| `disp(%RIP)` or `disp(%PC)` | `[pc + imm]` |
+| `disp(%PC)`, `disp(%rip)` (the program counter) | `[pc + imm]` |
 | `disp(%Rb, %Ri, s)` | `[reg + reg * imm + imm]`: registers base then index, numbers displacement then scale `s` |
 
 A displacement may start with `-` (`-4(%R5)`, `-0x10(%R5)`); as in a bracketed Intel form, it applies to the expression's first term.
@@ -282,12 +292,94 @@ once). Unknown keys are errors.
 | `maxOperands` | Most operands an instruction may be written with, 2-9. Optional, default 3. |
 | `description` | The CPU itself (§6.2). Required. |
 | `elf` | What `-f elf` needs (§6.2). Optional. |
+| `registers` | The register list: names for the registers (below §6.2). Optional. |
 | `fields` | Named fields (§6.3). Required. |
 | `formats` | Named instruction layouts (§6.4). |
 | `modes` | Values an addressing mode contributes (§6.5). |
 | `operandSets` | Named groups of modes (§6.5). |
 | `modeSets` | Families of instructions that share encodings (§6.6). |
 | `instructions` | The instructions, by mnemonic (§6.7). Required. |
+| `include` | The machine files this one builds on (below). Optional. |
+| `replace` | Changes to what the included files give (below). Optional. |
+| `models` | Named variants, each a container (below). Optional. |
+| `defaultModel` | The model applied: one of `models`, or the `cpuName` for the file's globals alone. Required with `models`. |
+
+**Building on other files.** A machine file may list, in `include`,
+files it builds on: an instruction set and its extensions (RV32I, then
+RV32IMC), or an architecture and its wider successor. Each path is
+relative to the including file's folder. They are merged into one
+file, which is then checked as a whole, as above:
+
+- **Order**: the included files first, in list order, then the file
+  itself. A file included twice (two parts that both include a base) is
+  read once; a file that includes itself, directly or not, is an error.
+- **Adding** is free: a key the includes don't have is added, and
+  objects (`fields`, `instructions`, an instruction's forms) merge key by
+  key, so a file adds instructions, fields or forms by naming them.
+  Writing an inherited value again, unchanged, is allowed.
+- **Changing** an inherited value needs `replace`: an object shaped like
+  the file, holding only the changes. A value inside it replaces the
+  inherited one; `null` removes the inherited key (an instruction a
+  superset lacks). A value written plainly that differs from the
+  inherited one is an error that says so, and so is a value written
+  both plainly and in `replace`, or a `replace` of something not
+  inherited. A list or a single value (`addressBits`) changes only as a
+  whole.
+- **Two includes** may give the same key: objects merge, the same value
+  twice is fine, and different values are an error naming both files,
+  unless this file sets it in `replace`.
+- **`cpuName` is inherited** like any other value, so a superset
+  replaces it: `{ "include": ["RV32I.json"], "replace": { "cpuName": "RV32IM" }, ... }`.
+- **A fragment** is a file with no `cpuName` after its includes are
+  merged: it is only ever included. `-m` rejects it, and
+  `--list-machines` doesn't list it.
+- Each file's `$schema` is its own. A problem is reported at the file
+  that wrote the value it is about (`lib/base.json: error: field
+  'dst': ...`), or, for a check of the merged whole, at the file that
+  defines the field, instruction or section it names.
+
+```json
+{
+  "$schema": "./cpu_schema.json",
+  "include": ["RV32I.json"],
+  "replace": { "cpuName": "RV32IM", "instructions": { "FENCE.I": null } },
+  "instructions": { "MUL": { ... }, "DIV": { ... } }
+}
+```
+
+**Models.** Everything outside `models` is the file's *globals*, which
+every model has. A model is a named container holding what a variant
+adds or changes: `fields`, `formats`, `modes`, `operandSets`,
+`modeSets` and `instructions`, its own `replace` (changing the
+globals), and `base`, the models it builds on. Anything else, such as
+`description` or `elf`, belongs to the file, so a model never changes
+the CPU's width or ELF settings.
+
+```json
+"models": {
+  "m":          { "instructions": { "MUL": { ... }, "DIV": { ... } } },
+  "c":          { "formats": { "ci": { ... } }, "instructions": { "C.LI": { ... } } },
+  "sifive-e31": { "base": ["m", "c"] }
+},
+"defaultModel": "sifive-e31"
+```
+
+- **One model is applied**: `defaultModel`, which every file with models
+  names; it may be the `cpuName`, for the globals alone. Its bases
+  come first, depth first, each once, then the model itself, by the
+  rules for includes: it adds freely, changes a global only in its
+  `replace`, and two bases that disagree are an error. A base that
+  doesn't exist, or bases that loop, are errors.
+- **Extensions and chips are both models**: an extension (`m`, `c`)
+  holds instructions; a chip (`sifive-e31`) names the extensions it
+  has as its bases.
+- **Models are inherited and merged by name** like any other key: a file
+  including another gets its globals and its models, and can add to an
+  inherited model by naming it, change one in `replace`, or remove one
+  with `null`.
+- A problem inside a model is reported as `model 'm': ...`, at the file
+  that wrote it. `-I --origins` shows each instruction's file and model;
+  `--dump-machine` shows the file with its model applied.
 
 ### 6.2 `description` and `elf`
 
@@ -303,6 +395,7 @@ once). Unknown keys are errors.
 | Key | Meaning |
 |---|---|
 | `regCount` | Registers `R0` to `R<regCount-1>` exist; a higher register number is an error. Required (0 for a CPU with no `R#` registers). |
+| `regBits` | The general registers' width in bits, 1-64. Optional; a register-list entry without `bits` has this width. |
 | `addressBits` | Width of an address, 1-64. Required. Every byte must lie in `0 .. 2^addressBits - 1` (a zero-size line, e.g. a label, may be at `2^addressBits`), else an error on the first line in each section outside it. Also sets the listing's address width and `.ADDR`'s. |
 | `byteOrder` | `"little"` or `"big"`. Required. The order of bytes in `.WORD`/`.LONG`/`.QUAD` and in an instruction built from fields (§7.1), and of every field of an ELF object (§8.4). |
 | `relOffset` | Where a `pcrel` distance counts from: `"before"`, the instruction's own address (OpenRISC, RISC-V), or `"after"`, the next instruction's (x86, MIPS). Required when any field is `pcrel`; otherwise ignored. |
@@ -313,9 +406,43 @@ once). Unknown keys are errors.
 | `eMachine` | ELF `e_machine`. Optional, default 0 (`EM_NONE`). See the User's Guide for the choices an invented CPU has. |
 | `elfClass` | 32 or 64: `ELFCLASS32` or `ELFCLASS64` output. Required. |
 | `relocationFormat` | `"rela"` (default: `SHT_RELA`, addends in the entries, relocated fields zeroed) or `"rel"` (`SHT_REL`, each addend written into its relocated field, as i386 and 32-bit ARM use). Optional. |
+| `globalJumps` | A jump or branch (a field with `"target": "jump"`) to a `.GLOBAL` label in its own section: `"relocate"` (default), as GAS does for OR1K and RISC-V, or `"resolve"`, as GAS does for x86 (§8.4). Optional. |
 | `relocations` | ELF relocation type by field kind and width (§8.4): `addr` / `pcrel`, optionally with the width (`pcrel32`, tried before `pcrel`) and, for a field whose `target` is `call` or `jump`, `:call`/`:jump` (`pcrel32:call`, tried first); for a `signed` `addr` field, `:signed` (`addr32:signed`, with no fallback to `addr32`). Required. |
 
 `-f elf` needs the `elf` block; without it, it is an error.
+
+**The register list** (`registers`) gives the registers names; a CPU
+without one is written with `R0`... only, as before. Each key is a
+name: a letter, then letters, digits and `_`, case-insensitive. `R<n>`
+always names general register n and `PC` the program counter, on every
+CPU, so neither can be a list name except `PC` with `"role": "pc"`.
+The value is the register's number (`"BX": 3`), or an object:
+
+| Key | Meaning |
+|---|---|
+| `number` | The general register, below `regCount`. Several names may share one. |
+| `bits` | Its width; `regBits` if not given. |
+| `role` | `pc`, `sp`, `link` or `flags`. A `pc` entry may have no number (AMD64's `RIP`). |
+| `const` | It reads as this value (RISC-V's `x0`). |
+| `space`, `index` | A register outside the general ones, in a named space, in place of `number`: `"SR": {"space": "spr", "index": 17}`. |
+| `parent`, `lsb`, `writes` | A part of another register: which, where its lowest bit is in it, and what writing the part does to the rest, `merge` (kept: `AX`, `AL`, `AH`) or `zeroExtend` (cleared: AMD64's `EAX` in `RAX`). |
+| `alias` | Another name for the register it names, with all of that register's values, and no other keys: `"a0": {"alias": "x10"}`. |
+
+```json
+"registers": {
+  "EAX": 0, "ECX": 1,
+  "AX": { "number": 0, "bits": 16, "parent": "EAX", "lsb": 0, "writes": "merge" },
+  "AH": { "number": 4, "bits": 8,  "parent": "EAX", "lsb": 8, "writes": "merge" },
+  "EIP": { "role": "pc", "bits": 32 }
+}
+```
+
+The list merges like any other keyed object (§6.1): a file building on
+another adds registers, changes one in `replace`, or removes one with
+`null`; a model may add registers, but not change them. `-I` shows
+the list by family, the program counter first:
+`Registers: PC(EIP), R0(AH, AL, AX, EAX), R1(ECX), ...`, and
+`-I --origins` where each register came from.
 
 ### 6.3 Fields
 
@@ -331,7 +458,7 @@ them.
 | `pieces` | Instead of `bits`/`lsb`/`valueLsb`: a list of such pieces, all filled from one value (e.g. RISC-V's scattered branch offset). No value bit may be taken twice. |
 | `value` | `con` only: the constant. |
 | `signed` | An `imm` or `addr` field the CPU sign-extends (AMD64's REX.W `imm32`): `true` makes its value fit as two's complement only (`0x80000000` doesn't fit 32 bits), and an `addr` field's relocation `addr<W>:signed` (§8.4). Optional, default `false`. |
-| `target` | A `pcrel` field's operand: `"data"` (the default), `"call"` (a call's target) or `"jump"` (a jump's or branch's). Picks the relocation type, and whether a `.GLOBAL` label in the same section relocates (§8.4). |
+| `target` | A `pcrel` field's operand: `"data"` (the default), `"call"` (a call's target) or `"jump"` (a jump's or branch's). Picks the relocation type; with `elf.globalJumps: "resolve"`, a `jump` to a `.GLOBAL` label in the same section is resolved rather than relocated (§8.4). |
 | `round` | An `imm` or `addr` field taking a high address part whose low part the CPU sign-extends (RISC-V's `%hi`, OR1K's `ha`): `true` adds half the unit of its lowest taken bit (`valueLsb`) first, `(x + 0x800) >> 12` for `"valueLsb": 12`. Optional, default `false`. |
 | `relocation` | An `addr` or `pcrel` field's own ELF relocation type, an integer, for when the `elf.relocations` lookup by kind and width can't tell this field's layout from another's (RISC-V's `R_RISCV_LO12_I` and `LO12_S`). The relocation then covers the whole instruction (§8.4). Optional. |
 
@@ -342,7 +469,7 @@ them.
 | `reg` | an operand's register number. |
 | `imm` | an operand's number, as is: a constant. |
 | `addr` | an operand's number that is an address: written as is; in ELF, an absolute relocation. |
-| `pcrel` | an operand's number minus the PC: the instruction's own address, or the next instruction's (`description.relOffset`, §6.2); in ELF, a PC-relative relocation when the operand is `reloc` (§6.5), or a `.GLOBAL` label and `target` isn't `jump` (§8.4). |
+| `pcrel` | an operand's number minus the PC: the instruction's own address, or the next instruction's (`description.relOffset`, §6.2); in ELF, a PC-relative relocation when the operand is `reloc` (§6.5), or a `.GLOBAL` label, unless a `jump` with `elf.globalJumps: "resolve"` (§8.4). |
 | `scl` | log2 of an operand's number, which must be 1, 2, 4 or 8 (x86 SIB scale). |
 
 Every value -- `value`, `set` values, operand numbers -- may be written
@@ -399,6 +526,14 @@ that part, and a plain number takes only forms without one. A key may list
 alternatives with `|`, expanded when the file loads:
 `"reg, imm|local|reloc"` is three forms with one encoding. A `local`
 operand with no `local` form uses the `reloc` one.
+
+Patterns are read with `src/grammar/ptasmMachine.g4`, which skips
+spaces: `"reg,imm"` and `"reg, imm"` are one form. ptasm uses each
+pattern in its standard spelling (`", "` between operands, `" + "` and
+`" * "` inside brackets, nothing around `|` or inside an address part's
+parentheses) and warns when the file writes one otherwise (`'reg,imm' is
+spelled untidily; read as 'reg, imm'`); it never rewrites the file. A
+pattern that doesn't parse is an error giving the column.
 
 `modes` gives the `set` values a mode contributes (e.g. its mode
 bits): `"[reg]": { "mode": 1 }`. `operandSets` names groups of modes,
@@ -549,10 +684,10 @@ or, with `elf.relocationFormat: "rel"`, `SHT_REL` (`.rel<name>`).
   no type at all is an error, never the zero-extending `addr...`), a data slot (§4) `addr` of its width
   (`.QUAD msg`: `addr64`), a `pcrel` field `pcrel`, or with
   `"target": "call"`/`"jump"` `pcrel...:call`/`pcrel...:jump`. A
-  `.GLOBAL` label may be interposed at link time, so a `call` or `data`
-  `pcrel` reference to it relocates even from its own section; a
-  `jump` to it is resolved by ptasm (GAS does the same, unless given
-  `-mshared`). A field with its own `relocation` type (§6.3) is
+  `.GLOBAL` label may be bound elsewhere at link time, so a `pcrel`
+  reference to it relocates even from its own section. A `jump` to it
+  does too, unless the machine file says `elf.globalJumps: "resolve"`,
+  as GAS does for x86 (AMD64, I386; MSP430 for now, below). A field with its own `relocation` type (§6.3) is
   relocated as RISC-V and OR1K relocations are, by the whole
   instruction: `r_offset` is the instruction's address, the type is
   the field's, and only the field's bits are cleared (the opcode and

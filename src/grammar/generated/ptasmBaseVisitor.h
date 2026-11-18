@@ -67,6 +67,22 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitMemory(ptasmParser::MemoryContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitMemoryIndirect(ptasmParser::MemoryIndirectContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAddress(ptasmParser::AddressContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAddressTerm(ptasmParser::AddressTermContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitValue(ptasmParser::ValueContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -75,35 +91,11 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitRegister(ptasmParser::RegisterContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitRegisterIndirect(ptasmParser::RegisterIndirectContext *ctx) override {
+  virtual std::any visitRegisterTerm(ptasmParser::RegisterTermContext *ctx) override {
     return visitChildren(ctx);
   }
 
   virtual std::any visitExpression(ptasmParser::ExpressionContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitDirect(ptasmParser::DirectContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitIndexed(ptasmParser::IndexedContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitIndexedIndirect(ptasmParser::IndexedIndirectContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitRelative(ptasmParser::RelativeContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitRelativeIndirect(ptasmParser::RelativeIndirectContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -116,6 +108,10 @@ public:
   }
 
   virtual std::any visitAttDisplacement(ptasmParser::AttDisplacementContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAttReg(ptasmParser::AttRegContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -132,10 +128,6 @@ public:
   }
 
   virtual std::any visitAttIndexed(ptasmParser::AttIndexedContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitAttRelative(ptasmParser::AttRelativeContext *ctx) override {
     return visitChildren(ctx);
   }
 

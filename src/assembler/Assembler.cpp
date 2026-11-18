@@ -22,7 +22,6 @@
 #include <string>
 #include <type_traits>
 #include <variant>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -161,7 +160,8 @@ std::vector<SourceStatement> Assembler::parse(const std::string& sourceText) con
     parser.addErrorListener(&syntaxErrors);
     AsmParser asmParser(*diagnostics, {.maxOperands = cpu->maxOperands(),
                                        .addressSlotBytes = addressSlotBytes(),
-                                       .verbose = verbose});
+                                       .verbose = verbose,
+                                       .registers = &bom->machine.registers});
     if (syntax == Syntax::att) {
         asmParser.visitAttProg(parser.attProg());
     } else {
@@ -292,7 +292,7 @@ void Assembler::run(const directive::Align& align) {
     auto const size = static_cast<size_t>(padding);
     addStatement(Statement{.kind = Reserve{},
                            .size = size,
-                           .bytes = std::vector<u_char>(size, 0x00),
+                           .bytes = std::vector<std::uint8_t>(size, 0x00),
                            .lineNumber = align.line});
 }
 
@@ -305,7 +305,7 @@ void Assembler::run(const directive::Space& space) {
     auto const size = static_cast<size_t>(count);
     addStatement(Statement{.kind = Reserve{},
                            .size = size,
-                           .bytes = std::vector<u_char>(size, 0x00),
+                           .bytes = std::vector<std::uint8_t>(size, 0x00),
                            .lineNumber = space.line});
 }
 
@@ -408,7 +408,7 @@ void Assembler::dumpLines() {
                     dumpOperand(arg);
                 }
                 std::cout << " [";
-                for (u_char const byte : line.bytes) {
+                for (std::uint8_t const byte : line.bytes) {
                     std::cout << "0x" << std::setw(2) << std::setfill('0') << std::hex << (int(byte) & kByteMask) << ", ";
                 }
                 std::cout << "] 0x";

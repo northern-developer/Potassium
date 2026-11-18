@@ -9,6 +9,7 @@ Assemble what compilers write: GCC's directives and pseudo-instructions, fuller 
 ## Tickets
 
 - T1: GAS input -- assemble real compiler output -- Assigned -- design conversation first.
+- T2: A CPU's own assembly syntax -- Assigned -- from the survey of existing CPUs (2026-11-17); design conversation first.
 
 ## Addenda
 
@@ -37,6 +38,10 @@ Whether equivalent Intel and AT&T operands always map to the same mode; fixed if
 **Status:** Assigned
 
 `R_X86_64_GOTPCREL`: a PIE can't reach a library variable through `PC32` or `PLT32`.
+
+Also from the survey of existing CPUs, 2026-11-17: in position-independent code, a machine file can name
+the relocation that replaces each ordinary one (SPARC's `elf.pic`), so
+the same source assembles for PIC with `-fPIC`'s relocations.
 
 ### A6: `--defsym NAME=value`
 

@@ -215,6 +215,55 @@ each a real instruction set in mode sets, and
 `tests/fixtures/family-cpu.json`, a small invented one. Modes, patterns,
 `modeFrom` and the rest are in SPEC §6.5 and §6.6.
 
+## Building on another machine file
+
+When a CPU extends another, its machine file can include the other's
+and add only what's new, instead of copying it. Say `MYCPU.json`
+describes a base CPU and `MYCPU-M.json` adds a multiplier:
+
+```json
+{
+  "$schema": "./cpu_schema.json",
+  "include": ["MYCPU.json"],
+  "replace": { "cpuName": "MYCPU-M" },
+  "fields": { "mul_op": { "build": "con", "value": "0x23", "bits": 6, "lsb": 10 } },
+  "instructions": { "MUL": { "forms": { "reg, reg": { "size": 2, "fields": ["mul_op", "dst", "src"] } } } }
+}
+```
+
+- Everything `MYCPU.json` has, `MYCPU-M.json` has too; its own
+  `fields` and `instructions` are added to the inherited ones.
+- `replace` holds what changes: here the name, which is inherited like
+  everything else. Changing an inherited value anywhere else, by
+  writing it plainly with a new value, is an error that points you at
+  `replace`. A `null` in `replace` removes an inherited key, such as an
+  instruction the new CPU doesn't have.
+- Paths in `include` are relative to the including file. A file can
+  include several (a base and two extensions); a file both include is
+  read once.
+- A file with no `cpuName` is a *fragment*: a part that other files
+  include, which `-m` won't load on its own.
+
+When one file describes several variants of a CPU (chips with or
+without a multiplier, say), give each its own **model**: a named
+container of the instructions (and fields, formats...) that variant
+adds. A chip's model can build on others with `"base"`:
+
+```json
+"models": {
+  "m":    { "instructions": { "MUL": { ... } } },
+  "chip": { "base": ["m"] }
+},
+"defaultModel": "chip"
+```
+
+`defaultModel` is required whenever there are models; naming the
+`cpuName` instead applies the globals alone. `ptasm -I --origins -m
+MYCPU-M` lists every instruction with the file and model it came from,
+and `ptasm --dump-machine -m MYCPU-M` prints the file as ptasm sees it.
+
+The full rules are in `docs/SPEC.md` §6.1.
+
 ## Addressing modes, for `cpu.json` authors
 
 Each operand of a source line has a **mode**, written the way the
@@ -231,7 +280,7 @@ patterns) are keyed by these.
 | `[imm]` | `[0x10]` | a bracketed absolute address |
 | `[reg + imm]` | `[R1 + 0x10]` | register + displacement |
 | `[[reg + imm]]` | `[[R1 + 0x10]]` | double bracket: a synthetic convention invented for this project's own test fixtures (TESTCPU-0), not a real single-instruction mode on any hardware this project targets |
-| `[pc + imm]` | `[PC + 0x10]`, `[RIP + 0x10]` | PC-relative. Both spellings are accepted everywhere; `PC` is this project's convention, `RIP` the real x86-64 term |
+| `[pc + imm]` | `[PC + 0x10]`, `[RIP + 0x10]` | PC-relative. `PC` works on every CPU; other names for the program counter (`RIP`) come from the machine file's register list, as entries with the `pc` role |
 | `[[pc + imm]]` | `[[PC + 0x10]]` | double-bracket PC-relative; same caveat as `[[reg + imm]]` |
 | `[reg + reg * imm + imm]` | AT&T `3(%R1,%R2,8)` | scaled index (base, index, displacement, scale) |
 
@@ -367,7 +416,7 @@ number). A `from` entry or a mode set's `opN` map uses these names.
 | direct | `[0x10]` | `0x10` (but a call's or jump's target: `call f`) | | | `0x10` | |
 | indexed | `[R1 + 4]`, `[R1 - 4]` | `4(%R1)`, `-4(%R1)` | `R1` | | `4` / `-4` | |
 | indexed indirect | `[[R1 + 4]]` | -- | `R1` | | `4` | |
-| relative | `[PC + 4]`, `[RIP + 4]` | `4(%PC)`, `4(%RIP)` | | | `4` | |
+| relative | `[PC + 4]`, `[RIP + 4]` | `4(%PC)`, `4(%rip)` | | | `4` | |
 | relative indirect | `[[PC + 4]]` | -- | | | `4` | |
 | scaled index | -- | `3(%R1,%R2,8)`, `-3(%R1,%R2,8)` | `R1` | `R2` | `3` / `-3` | `8` |
 | register jump target | `[R1]` | `*%R1` | `R1` | | | |
@@ -402,6 +451,10 @@ The block needs `elfClass` and `relocations`. AMD64's, for example:
 - `relocationFormat` is `"rela"` (the default) or `"rel"`: follow the
   CPU's ELF ABI -- i386 and 32-bit ARM use REL (the addend is stored in
   the relocated field), x86-64, MSP430 and RISC-V use RELA.
+- `globalJumps` is `"relocate"` (the default) or `"resolve"`: what the
+  CPU's GNU assembler does with a jump or branch to a `.GLOBAL` label
+  in its own section. Most relocate it, so the linker can bind the
+  label elsewhere; x86's resolves it.
 - `relocations` gives the ELF relocation type for each field kind that
   can need one: `addr` (an absolute reference), `pcrel` (a PC-relative
   one). Add the field's width to pick a different type per width

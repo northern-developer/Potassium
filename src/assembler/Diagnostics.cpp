@@ -16,6 +16,7 @@ bool Diagnostics::isError(Category category) const {
         case Category::config:
             return !warnOnly;
         case Category::advice:
+        case Category::configAdvice:
             return false;
         case Category::syntax:
         case Category::source:
@@ -29,8 +30,9 @@ bool Diagnostics::isError(Category category) const {
 std::string Diagnostics::location(const Diagnostic& diagnostic) const {
     switch (diagnostic.category) {
         case Category::config:
+        case Category::configAdvice:
         case Category::fatal:
-            return configName;
+            return diagnostic.file.empty() ? configName : diagnostic.file;
         case Category::system:
             return "ptasm";
         default:
@@ -49,7 +51,11 @@ std::string Diagnostics::location(const Diagnostic& diagnostic) const {
 std::string Diagnostics::fileOf(const Diagnostic& diagnostic) const {
     switch (diagnostic.category) {
         case Category::config:
+        case Category::configAdvice:
         case Category::fatal:
+            if (!diagnostic.file.empty()) {
+                return diagnostic.file;
+            }
             return configPath.empty() ? configName : configPath;
         case Category::system:
             return "";

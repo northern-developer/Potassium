@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <elf.h>
 #include <utility>
@@ -260,8 +261,8 @@ inline Elf32_Shdr elf32Section(const std::string& image, Elf32_Word type) {
     return {};
 }
 
-inline std::vector<u_char> allBytes(const Bom& bom) {
-    std::vector<u_char> bytes;
+inline std::vector<std::uint8_t> allBytes(const Bom& bom) {
+    std::vector<std::uint8_t> bytes;
     for (const auto& block : bom.sections) {
         for (const auto& line : block.lines) {
             bytes.insert(bytes.end(), line.bytes.begin(), line.bytes.end());

@@ -11,11 +11,22 @@ of truth: the machine file (`machines/<CPU>.json`).
 1. **An assembler** for custom CPUs, in Intel and AT&T syntax -- ptasm
    itself. Release 0.1.
 2. **A QEMU CPU model**, first written by hand, then generated from the
-   machine file (`plan/0.2/E06-qemu.md`).
+   machine file (`plan/0.3/E01-qemu.md`).
 3. **An LLVM backend**, first by hand, then generated
-   (`plan/0.2/E07-llvm.md`).
+   (`plan/0.4/E01-llvm.md`).
 4. **A Renode CPU model**, generated from the same machine file
-   (`plan/0.2/E11-renode.md`).
+   (`plan/0.3/E02-renode.md`).
+
+**The tools**: `ptasm`, the assembler; `ptsim`,
+which writes the QEMU and Renode CPU models (0.3); and `ptllvm`, which
+writes the LLVM backend (0.4); and `ptbsp`, which writes board support
+for a cpu and board pair: start-up code, linker scripts, vectors, a C
+library's port layer or none, a Rust runtime crate (0.5). All four
+share `libptasm`, which reads and checks the machine file, linked
+statically. The writers produce source files, not binaries: separate
+projects build LLVM, and QEMU and Renode, from them, and a further
+project uses the built tools to compile and test a Rust `no_std`
+embedded system for a custom CPU.
 
 Programs for any of these CPUs should be debuggable under QEMU and
 Renode: through their GDB servers, with LLDB as the intended debugger
@@ -29,8 +40,11 @@ for any CPU the machine file can describe.
 
 | | |
 |---|---|
-| `plan/0.1/README.md` | The current release, 0.1: its goal and every Epic and Ticket, with status. |
-| `plan/0.2/README.md` | The next release. |
+| `plan/0.1/README.md` | Release 0.1, finished with 0.1.3: its goal and every Epic and Ticket, with status. |
+| `plan/0.2/README.md` | The current release, 0.2: the machine file and the assembler; 0.2.1 is its first. |
+| `plan/0.3/README.md` | The emulators: QEMU and Renode. |
+| `plan/0.4/README.md` | The compiler: LLVM. |
+| `plan/0.5/README.md` | Board support: `ptbsp`. |
 | `plan/wishlist.md` | Work not yet placed in any release. |
 | `docs/SPEC.md` | What ptasm does today. |
 | `docs/DESIGN.md`, `docs/ARCHITECTURE.md` | Why it is built that way. |
@@ -94,4 +108,7 @@ Epic, Ticket, Addendum.
 `ptasm` is a **P**ro**t**otype **As**se**m**bler for custom CPUs,
 pronounced "potassium". `ptas` (an AT&T-syntax assembler) and `ptcpu`
 (emulation) were planned as sibling projects; AT&T syntax became part
-of ptasm (0.1:E3.T1).
+of ptasm (0.1:E3.T1), and emulation is `ptsim`'s, beside `ptllvm` and
+`ptbsp`, all on `libptasm` (2026-11-17). Names checked for collisions:
+`ptlib` is taken (PTLib, `libpt`), and `ptllm` would read as a language
+model.

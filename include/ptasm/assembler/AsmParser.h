@@ -1,6 +1,6 @@
 #pragma once
+#include <cstdint>
 #include <string>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -8,6 +8,7 @@
 #include "ptasm/assembler/Bom.h"
 #include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/assembler/SourceStatement.h"
+#include "ptasm/cpu/Machine.h"
 
 constexpr int kHexBase = 16;     // std::strtol base for BYTE/HEX tokens
 constexpr int kDecimalBase = 10; // std::strtol base for NUMBER tokens
@@ -22,10 +23,11 @@ public:
         int maxOperands{};      // bounds an instruction's operand count (Cpu)
         int addressSlotBytes{}; // a .ADDR slot's width
         bool verbose = false;   // the list carries -v's echo of each line (directive::Trace)
+        const std::vector<Register>* registers = nullptr; // the machine file's register list
     };
     AsmParser(Diagnostics& diagnostics, Settings settings)
         : diagnostics(&diagnostics), maxOperands(settings.maxOperands), addressSlotBytes(settings.addressSlotBytes),
-          verbose(settings.verbose) {}
+          verbose(settings.verbose), registers(settings.registers) {}
 
     // The statements so far, handed over (the parser keeps none).
     [[nodiscard]] std::vector<SourceStatement> takeStatements() { return std::move(statements); }
@@ -35,32 +37,50 @@ private:
     int maxOperands;
     int addressSlotBytes;
     bool verbose;
+    const std::vector<Register>* registers;
     std::vector<SourceStatement> statements;
+
+    // A register a name stands for: R<n>, PC, or a register-list entry.
+    struct RegisterRef {
+        std::optional<int> number;     // none for the pc (unless it is a general register) or a space's
+        std::optional<uint16_t> entry; // its index in the register list
+        bool pc = false;
+        bool inSpace = false;
+    };
+    [[nodiscard]] std::optional<RegisterRef> registerNamed(const std::string& text) const;
+    // A register operand for `text` (a name registerNamed knows), or an
+    // error at `line` if it can't be one (the pc, a register in a space).
+    Operand registerOperand(const std::string& text, const RegisterRef& ref, size_t line);
+    // A name a label or directive declares; an error if it's a register's.
+    std::string declaredName(ptasmParser::NameContext* ctx, const char* what);
+    // An expression's terms as a value; an error for each register in it.
+    std::vector<Term> valueTerms(ptasmParser::ExpressionContext* ctx);
+    void rejectRegisters(std::vector<Term>& terms, size_t line);
+    enum class Brackets : std::uint8_t { one, two }; // [..] or [[..]]
+    struct AddressTerms {
+        std::vector<std::pair<RegisterRef, std::string>> registers; // with how each was written
+        std::vector<Term> values;
+        std::string part;
+        size_t plainTerms = 0; // numbers and labels outside an address part
+    };
+    void collectAddress(ptasmParser::AddressContext* address, size_t line, AddressTerms& terms);
+    void addAddressTerm(ptasmParser::AddressTermContext* term, bool negated, size_t line, AddressTerms& terms);
+    // [..] and [[..]]: the mode from which of the terms are registers.
+    Operand memoryOperand(ptasmParser::AddressContext* address, Brackets brackets, size_t line);
+    Term termOf(ptasmParser::RegisterTermContext* registerTerm, ptasmParser::NameContext* name,
+                ptasmParser::NumberContext* number);
 
     static std::string toUpper(std::string text);
 
-    // Shared by visitRegister/visitRegisterIndirect/visitIndexed/
-    // visitIndexedIndirect, each of which has its own REG() token (see
-    // ptasm.g4) rather than inheriting from RegisterContext -- call
-    // this directly on each context's own REG() instead
-    // of casting ctx to RegisterContext* (that was UB: those context
-    // types are unrelated siblings, not related by inheritance).
-    Operand buildRegisterOperand(antlr4::tree::TerminalNode* regToken);
-
     // Whether ctx's own operator token (not a nested rule's) is '-'.
     static bool hasMinusOperator(antlr4::ParserRuleContext* ctx);
-    // The terms of a bracketed "[X op immediate]" form; '-' negates the
-    // immediate's first term (so "[R2 - 4 + 8]" is R2 - 4 + 8).
-    // A bracketed operand's number (terms and part); a `-` before it in
-    // `ctx` negates its first term.
-    Operand bracketedValue(antlr4::ParserRuleContext* ctx, ptasmParser::ValueContext* value);
 
     // Strips the surrounding quotes from a matched STRING token's raw text
     // and decodes backslash escapes (\n \t \r \0 \\) in what's left. Does
     // NOT support \" -- the grammar's STRING lexer rule (`~["]*`) can't
     // tokenize an escaped quote inside a string literal at all, so one
     // never reaches here; that would need a grammar change, not this.
-    static std::vector<u_char> decodeStringLiteral(const std::string& rawMatchedText);
+    static std::vector<std::uint8_t> decodeStringLiteral(const std::string& rawMatchedText);
 
 
     // One per directive visitDirective handles.
@@ -81,16 +101,10 @@ public:
     std::any visitLabel(ptasmParser::LabelContext* ctx) override;
     std::any visitOperandList(ptasmParser::OperandListContext* ctx) override;
     std::any visitOperand(ptasmParser::OperandContext* ctx) override;
-    std::any visitRegister(ptasmParser::RegisterContext* ctx) override;
-    std::any visitRegisterIndirect(ptasmParser::RegisterIndirectContext* ctx) override;
+    std::any visitRegisterTerm(ptasmParser::RegisterTermContext* ctx) override;
     std::any visitExpression(ptasmParser::ExpressionContext* ctx) override;
     std::any visitValue(ptasmParser::ValueContext* ctx) override;
     std::any visitAddressPart(ptasmParser::AddressPartContext* ctx) override;
-    std::any visitDirect(ptasmParser::DirectContext* ctx) override;
-    std::any visitIndexed(ptasmParser::IndexedContext* ctx) override;
-    std::any visitIndexedIndirect(ptasmParser::IndexedIndirectContext* ctx) override;
-    std::any visitRelative(ptasmParser::RelativeContext* ctx) override;
-    std::any visitRelativeIndirect(ptasmParser::RelativeIndirectContext* ctx) override;
     std::any visitString_(ptasmParser::String_Context* ctx) override;
     std::any visitName(ptasmParser::NameContext* ctx) override;
     std::any visitNumber(ptasmParser::NumberContext* ctx) override;
@@ -114,7 +128,7 @@ public:
     std::any visitAttRegisterIndirect(ptasmParser::AttRegisterIndirectContext* ctx) override;
     std::any visitAttDisplacement(ptasmParser::AttDisplacementContext* ctx) override;
     std::any visitAttIndexed(ptasmParser::AttIndexedContext* ctx) override;
-    std::any visitAttRelative(ptasmParser::AttRelativeContext* ctx) override;
+    std::any visitAttReg(ptasmParser::AttRegContext* ctx) override;
     std::any visitAttScaledIndex(ptasmParser::AttScaledIndexContext* ctx) override;
     std::any visitAttIndirectTarget(ptasmParser::AttIndirectTargetContext* ctx) override;
 };

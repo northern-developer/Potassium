@@ -9,7 +9,9 @@ S-records or an ELF object you can link with standard tools.
 ## Features
 
 - One assembler, any CPU: the target is data (`machines/<CPU>.json`),
-  not code.
+  not code. A machine file can build on others (an instruction set
+  and its extensions), hold named models of a CPU, and name its
+  registers (`RAX`, `a0`) for use in source.
 - Intel and AT&T syntax (`.s` sources are AT&T by default).
 - Output: `bin`, `hex`, `srec` (32-bit addresses), and `elf` (32- and
   64-bit, little- and big-endian, with relocations), plus a listing.
@@ -40,6 +42,7 @@ ptasm program.s   -m AMD64 -f elf -l          # with a listing to stdout
 ptasm program.asm -m RV32I -f elf -g          # with DWARF line information
 ptasm -I -m MSP430                            # what the target supports
 ptasm --list-machines                         # the machine files -m can find
+ptasm -I --origins -m MYCPU                   # where each instruction and register came from
 ptasm --version
 ```
 

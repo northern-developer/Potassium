@@ -3,11 +3,11 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -313,7 +313,7 @@ TEST_CASE("MSP430-negative.asm with -w: two errors become warnings; JNE counts w
     const Bom bom = assembleText(source, base + "/machines/MSP430.json", diagnosticsText, {.warnOnly = true, .format = "elf"});
     CHECK(diagnosticsText.find("test.asm:14: warning: PUSH has no 'imm' form; PUSH accepts: reg\n") != std::string::npos);
     CHECK(diagnosticsText.find("test.asm:15: warning: 'RLA' isn't an instruction of MSP430") != std::string::npos);
-    const std::vector<u_char> jneBack3{0xfd, 0x23}; // JNE: 0x2000 | (-3 & 0x3ff), little-endian
+    const std::vector<std::uint8_t> jneBack3{0xfd, 0x23}; // JNE: 0x2000 | (-3 & 0x3ff), little-endian
     CHECK(std::ranges::any_of(bom.sections.front().lines,
                               [&jneBack3](const Statement& line) { return line.bytes == jneBack3; }));
 }
@@ -332,7 +332,7 @@ TEST_CASE("RV32I-negative.asm with -w: two errors become warnings; a branch to a
     CHECK(relocations.front().offset == 0);
     const std::vector<Statement>& lines = bom.sections.front().lines;
     REQUIRE(lines.size() >= 2);
-    CHECK(lines[1].bytes == std::vector<u_char>{0x0f, 0x00, 0xc0, 0x03}); // GNU as: fence rw, io
+    CHECK(lines[1].bytes == std::vector<std::uint8_t>{0x0f, 0x00, 0xc0, 0x03}); // GNU as: fence rw, io
 }
 
 TEST_CASE("OR1K-negative.asm with -w: two errors become warnings; hi/lo and an .EXTERN branch relocate") {

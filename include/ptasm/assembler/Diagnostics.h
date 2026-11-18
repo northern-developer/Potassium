@@ -17,6 +17,7 @@ enum class Category : std::uint8_t {
     fatal,    // a cpu.json that can't be used at all (unreadable, invalid JSON)
     system,   // not tied to either input file (an output file that can't be opened)
     advice,   // always a warning: output is still written
+    configAdvice, // a cpu.json's warning (an untidily spelled pattern); never an error
 };
 
 // --diagnostics-format: GCC-style text; JSON, one object per line; or
@@ -28,6 +29,9 @@ struct Diagnostic {
     size_t line = 0;   // 1-based; 0 for none (cpu.json and system messages)
     size_t column = 0; // 1-based; 0 for none
     std::string message;
+    // A machine-file message about an included file: that file's path, in
+    // place of the -m file's name. Empty for the -m file itself.
+    std::string file;
 };
 
 // Collects every warning and error and prints them GCC style
@@ -75,8 +79,16 @@ public:
     void warning(size_t line, const std::string& message) {
         report({.category = Category::advice, .line = line, .message = message});
     }
-    void configError(const std::string& message) { report({.category = Category::config, .message = message}); }
-    void configFatal(const std::string& message) { report({.category = Category::fatal, .message = message}); }
+    // `file`: an included machine file the message is about; empty for the -m file.
+    void configError(const std::string& message, const std::string& file = "") {
+        report({.category = Category::config, .message = message, .file = file});
+    }
+    void configWarning(const std::string& message, const std::string& file = "") {
+        report({.category = Category::configAdvice, .message = message, .file = file});
+    }
+    void configFatal(const std::string& message, const std::string& file = "") {
+        report({.category = Category::fatal, .message = message, .file = file});
+    }
     void systemError(const std::string& message) { report({.category = Category::system, .message = message}); }
 
     [[nodiscard]] int errorCount() const { return errors; }

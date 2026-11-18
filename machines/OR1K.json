@@ -4,6 +4,7 @@
   "maxOperands": 3,
   "description": {
     "regCount": 32,
+    "regBits": 32,
     "addressBits": 32,
     "byteOrder": "big",
     "relOffset": "before"

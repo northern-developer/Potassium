@@ -165,21 +165,6 @@
         "CPP_LIBRARY_FORCE_INIT": "ON",
         "CPM_SOURCE_CACHE": "${sourceDir}/.cache/cpm"
       }
-    },
-    {
-      "name": "install",
-      "displayName": "Install Configuration",
-      "description": "Release build for installation with CPM_USE_LOCAL_PACKAGES enabled for testing installed packages",
-      "binaryDir": "${sourceDir}/build/install",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "BUILD_TESTING": "OFF",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_CXX_EXTENSIONS": "OFF",
-        "CPM_USE_LOCAL_PACKAGES": "ON",
-        "CPM_SOURCE_CACHE": "${sourceDir}/.cache/cpm"
-      }
     }
   ],
   "buildPresets": [
@@ -192,8 +177,7 @@
     { "name": "fuzz", "displayName": "Build Fuzz Targets", "configurePreset": "fuzz" },
     { "name": "tsan", "displayName": "Build with TSan", "configurePreset": "tsan" },
     { "name": "clang-tidy", "displayName": "Build with Clang-Tidy", "configurePreset": "clang-tidy" },
-    { "name": "init", "displayName": "Initialize Templates", "configurePreset": "init" },
-    { "name": "install", "displayName": "Build for Installation", "configurePreset": "install" }
+    { "name": "init", "displayName": "Initialize Templates", "configurePreset": "init" }
   ],
   "testPresets": [
     { "name": "test", "displayName": "Run All Tests", "configurePreset": "test", "output": { "outputOnFailure": true } },

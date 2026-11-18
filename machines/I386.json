@@ -4,6 +4,7 @@
   "maxOperands": 2,
   "description": {
     "regCount": 8,
+    "regBits": 32,
     "addressBits": 32,
     "byteOrder": "little",
     "relOffset": "after"
@@ -11,6 +12,7 @@
   "elf": {
     "eMachine": 3,
     "elfClass": 32,
+    "globalJumps": "resolve",
     "relocationFormat": "rel",
     "relocations": {
       "addr32": 1,

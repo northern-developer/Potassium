@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <sys/types.h>
 #include <vector>
 
 #include "ptasm/assembler/Bom.h"
@@ -17,7 +16,7 @@ std::vector<RecordWriter::Record> RecordWriter::records(const Bom& bom, size_t m
     std::vector<Record> result;
     for (const Section& block : bom.sections) {
         for (const Statement& line : block.lines) {
-            std::span<const u_char> rest(line.bytes);
+            std::span<const std::uint8_t> rest(line.bytes);
             auto address = static_cast<uint64_t>(line.address);
             while (!rest.empty()) {
                 uint64_t const toBoundary = kSegmentSize - (address % kSegmentSize);

@@ -11,7 +11,7 @@
 
 ## 2. Machine
 
-Real AMD64 has thousands of encodings. This target implements the ones `tests/link/program.c`'s clang output needs, **all with 64-bit operands** (a REX.W prefix, `0x48`): `MOV`, `ADD`, `AND`, `CMP`, `TEST`, `LEA`, `INC [RIP + disp]`, `PUSH`/`POP`, `JE`/`JNE`, `CALL`, `RET` and `SYSCALL`. `R#` names carry no width, so every register operand is the 64-bit register. `regCount` is 8: the registers with a 3-bit ID (`rax`..`rdi`); `R8`-`R15` need a REX.B/R bit that no form here sets.
+Real AMD64 has thousands of encodings. This target implements the ones `tests/link/program.c`'s clang output needs, **all with 64-bit operands** (a REX.W prefix, `0x48`): `MOV`, `ADD`, `AND`, `CMP`, `TEST`, `LEA`, `INC [RIP + disp]`, `PUSH`/`POP`, `JE`/`JNE`, `CALL`, `RET` and `SYSCALL`. Registers carry no width yet (E1.T2), so every register operand is the 64-bit register. `regCount` is 8: the registers with a 3-bit ID (`rax`..`rdi`); `R8`-`R15` need a REX.B/R bit that no form here sets.
 
 ELF: `ELFCLASS64`, `e_machine` 62 (`EM_X86_64`), RELA relocations;
 64-bit addresses, little-endian; PC-relative distances count from the
@@ -31,7 +31,7 @@ call or jump).
 | `R6` | `rsi` | `110` | syscall arg 2 |
 | `R7` | `rdi` | `111` | syscall arg 1 |
 
-`ptasm`'s grammar only supports digit-indexed `R#` register names (`docs/SPEC.md` §2.3), not x86 mnemonic register names (`rax`, `rdi`, etc.) -- hence `R0`/`R2`/`R6`/`R7` rather than their real names in `examples/AMD64.asm`. Registers `R1`/`R4`/`R5` (`rcx`/`rsp`/`rbp`) exist but aren't exercised by the sample programs.
+The machine file's register list names the registers `RAX`, `RCX`, `RDX`, `RBX`, `RSP` (the `sp` role), `RBP`, `RSI`, `RDI` (`R0`-`R7`), and the program counter `RIP` (the `pc` role), so source may use either spelling: `MOV RBX, RDI` is `MOV R3, R7`, in any case. `examples/AMD64.asm` keeps the `R#` spelling it was written in.
 
 ## 3. Instructions
 
@@ -93,8 +93,9 @@ Long  (forms "imm|reloc"):  0x0F 0x84 (JE) / 0x0F 0x85 (JNE), then a signed 32-b
 
 Both displacements are relative to the address right after the
 instruction (`description.relOffset: "after"`), and both fields are
-`"target": "jump"`, so a `.GLOBAL` label in the same section takes the
-short form with no relocation, as GAS does. The short form (2 bytes,
+`"target": "jump"` and the file says `elf.globalJumps: "resolve"`, so
+a `.GLOBAL` label in the same section takes the short form with no
+relocation, as GAS does. The short form (2 bytes,
 `je_rel8`) is for a label in the same section, resolved by ptasm. The
 long form (6 bytes, `je_rel32`) is what GAS emits
 for a jump it leaves to the linker: an `.EXTERN` or another section's

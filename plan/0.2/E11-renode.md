@@ -1,6 +1,6 @@
 # 0.2:E11: Renode
 
-**Status:** Assigned (2026-11-16)
+**Status:** Completed (0.1.3) -- T1; the rest moved to 0.3:E2 (2026-11-17).
 
 ## Goal
 
@@ -11,21 +11,8 @@ Renode's GDB server.
 
 - T1: A ptasm program debugged under QEMU and Renode -- Completed (0.1.3), 2026-11-17.
 
-## Addenda
+## Moved
 
-### A2: A generated Renode CPU model
-
-**Status:** Assigned (2026-11-16)
-
-Renode's CPU cores are tlib, derived from QEMU's TCG, plus a C# CPU
-class: the translator should share most of E6.A3's generator, and the
-C# side its register list. Platform glue (`.repl`) for a minimal board.
-
-### A3: Debugging through Renode's GDB server
-
-**Status:** Assigned (2026-11-16)
-
-The generated CPU exposes the whole register list to the GDB server,
-with the same target description as E6.A4; checked with LLDB (E7.A3). Renode's own server sends unsolicited stop replies that LLDB can't
-take (T1's `AckProxy` works around them), and names registers `x<n>`
-only; a generated CPU's description should give the ABI names too.
+A2 (a generated Renode CPU model) and A3 (debugging through Renode's
+GDB server) moved to 0.3:E2 as its A1 and A2 (`plan/0.3/E02-renode.md`)
+when 0.2 was split (2026-11-17).

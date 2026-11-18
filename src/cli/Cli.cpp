@@ -1,17 +1,18 @@
 #include "ptasm/cli/Cli.h"
 #include "ptasm/cli/Formats.h"
 #include "ptasm/assembler/Diagnostics.h"
+#include "ptasm/cpu/MachineFile.h"
 #include "ptasm/assembler/Syntax.h"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <fstream>
 #include <map>
 #include <ostream>
 #include <ranges>
 #include <regex>
+#include <sstream>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -45,6 +46,8 @@ struct RawOptions {
     bool warnOnly = false;
     std::string diagnosticsFormat = "text";
     bool isa = false;
+    bool origins = false;
+    bool dumpMachine = false;
     bool pad = false;
     bool debug = false;
     std::vector<std::string> defsyms;
@@ -190,6 +193,11 @@ void addOptions(CLI::App& app, RawOptions& raw, const CLI::Option*& listOption) 
     app.add_flag("-I,--isa", raw.isa,
                  "List every supported mnemonic/addressing-mode combination for -m's CPU config, then exit "
                  "(no source file needed)");
+    app.add_flag("--origins", raw.origins,
+                 "With -I: each form with the machine file (and model) that defined it, and every file that "
+                 "changed or removed it");
+    app.add_flag("--dump-machine", raw.dumpMachine,
+                 "Print -m's machine file as loaded (includes merged, its model applied) as JSON, then exit");
     app.add_option("--defsym", raw.defsyms,
                    "Define a constant, as .EQU does: NAME=value, value a decimal or 0x number (repeatable)")
         ->check([](const std::string& text) {
@@ -225,6 +233,8 @@ Options resolve(const RawOptions& raw, const CLI::Option& listOption) {
                     .warnOnly = raw.warnOnly,
                     .diagnosticsFormat = diagnosticsFormatOf(raw.diagnosticsFormat),
                     .isa = raw.isa,
+                    .origins = raw.origins,
+                    .dumpMachine = raw.dumpMachine,
                     .pad = raw.pad,
                     .debug = raw.debug,
                     .listMachines = raw.listMachines};
@@ -282,7 +292,11 @@ std::variant<Options, int> Cli::parse(int argc, const char* const* argv) const {
         *err << "-g: only -f elf can hold debug information\n";
         return 1;
     }
-    if (raw.sourcePath.empty() && !raw.isa && !raw.listMachines) {
+    if (raw.origins && !raw.isa) {
+        *err << "--origins: only with -I\n";
+        return 1;
+    }
+    if (raw.sourcePath.empty() && !raw.isa && !raw.listMachines && !raw.dumpMachine) {
         *err << app.help();
         return 1;
     }
@@ -321,10 +335,14 @@ void listMachines(std::ostream& out) {
             if (entry.path().extension() != ".json" || !entry.is_regular_file(error)) {
                 continue;
             }
-            std::ifstream file(entry.path());
-            nlohmann::json const document = nlohmann::json::parse(file, nullptr, false);
-            if (document.is_object() && document.contains("cpuName") && document["cpuName"].is_string()) {
-                machines.emplace_back(entry.path().stem().string(), document["cpuName"].get<std::string>());
+            // The merged file's cpuName: a superset sets its own in "replace";
+            // a fragment has none and isn't listed.
+            std::ostringstream unused;
+            Diagnostics quiet(unused);
+            std::optional<MachineFile> const document = readMachineFile(entry.path().string(), quiet);
+            if (document && document->json.is_object() && document->json.contains("cpuName") &&
+                document->json["cpuName"].is_string()) {
+                machines.emplace_back(entry.path().stem().string(), document->json["cpuName"].get<std::string>());
             }
         }
         std::ranges::sort(machines);

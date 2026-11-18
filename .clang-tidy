@@ -14,6 +14,8 @@ Checks: >
 CheckOptions:
   # The two libraries are used through their umbrella headers.
   misc-include-cleaner.IgnoreHeaders: 'runtime/Cpp/runtime/src/.*;nlohmann/.*'
+  # The ANTLR runtime's own headers include its umbrella header in a cycle.
+  misc-header-include-cycle.IgnoredFilesList: 'antlr4-runtime\.h'
   # doctest's CHECK macros would each count as a branch.
   readability-function-cognitive-complexity.IgnoreMacros: true
   # pc is the CPU's own term; from/to name a range.

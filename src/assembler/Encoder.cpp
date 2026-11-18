@@ -17,7 +17,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <sys/types.h>
 #include <utility>
 #include <vector>
 
@@ -324,10 +323,10 @@ void Encoder::recordPcrelRelocation(const Operand& arg, ptasm::Target target, Fi
             // A fixed address: the linker moves this line, so it computes
             // the distance, from no symbol (as GAS does).
             recordRelocation("", layout, "pcrel", where.target - where.pcFromField, line);
-        } else if (!arg.symbolRef->local || (arg.symbolRef->global && target != ptasm::Target::jump)) {
-            // A .GLOBAL label may be interposed at link time, so a call or
-            // data reference to it relocates even from its own section; a
-            // jump to it doesn't (as GAS does, without -mshared).
+        } else if (!arg.symbolRef->local || (arg.symbolRef->global && !resolvesGlobalJump(target))) {
+            // A .GLOBAL label may be bound elsewhere at link time, so a
+            // reference to it relocates even from its own section, except
+            // a jump on a target whose assembler resolves those (x86's GAS).
             std::string kind = "pcrel";
             if (target == ptasm::Target::call) {
                 kind = "pcrel:call";
@@ -336,6 +335,10 @@ void Encoder::recordPcrelRelocation(const Operand& arg, ptasm::Target target, Fi
             }
             recordRelocation(arg.symbolRef->symbol, layout, kind, arg.symbolRef->addend - where.pcFromField, line);
         }
+    }
+
+bool Encoder::resolvesGlobalJump(ptasm::Target target) const {
+        return target == ptasm::Target::jump && machine->elf && machine->elf->globalJumps == GlobalJumps::resolve;
     }
 
 int Encoder::fieldStartOffset(int lsb, int bits, const Statement& line) const {
@@ -371,7 +374,7 @@ bool Encoder::encodeData(Statement& line) {
             for (size_t byte = 0; byte < slot; ++byte) {
                 size_t const shift = bigEndian() ? slot - 1 - byte : byte;
                 line.bytes[(i * slot) + byte] =
-                    static_cast<u_char>((static_cast<uint64_t>(value) >> (shift * kBitsPerByte)) & kByteMask);
+                    static_cast<std::uint8_t>((static_cast<uint64_t>(value) >> (shift * kBitsPerByte)) & kByteMask);
             }
             if (arg.symbolRef) {
                 line.relocations.push_back(Relocation{.offset = i * slot,

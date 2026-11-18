@@ -1,5 +1,7 @@
 #include "ptasm/cpu/InstructionSet.h"
 #include "ptasm/cpu/Form.h"
+#include "ptasm/cpu/MachineGrammar.h"
+#include "ptasm/cpu/Problems.h"
 
 #include <nlohmann/json.hpp>
 
@@ -33,7 +35,12 @@ constexpr size_t kMaxSetExpansion = 1U << 16U;
 constexpr size_t kOperandPartLength = 8; // "op2.num1"
 
 using Json = nlohmann::json;
-using Problems = std::vector<std::string>;
+
+// The JSON pointer of `name` in a top-level section: "/fields/imm16".
+std::string pointerTo(const std::string& section, const std::string& name) {
+    return (Json::json_pointer() / section / name).to_string();
+}
+
 using SetValues = std::map<std::string, uint64_t>;
 
 // Builds a message in one allocation.
@@ -461,7 +468,7 @@ public:
               std::map<std::string, std::map<std::string, Encoding>>& encodingsOut, Problems& problemsOut) {
         fieldsOut = std::move(fields);
         encodingsOut = std::move(encodings);
-        problemsOut.insert(problemsOut.end(), problems.begin(), problems.end());
+        problemsOut.append(problems);
     }
 
 private:
@@ -481,6 +488,10 @@ private:
     void readInstructions(const Json& json);
 
     SetValues readSet(const Json& json, const std::string& context);
+    // An operand pattern as the loader uses it: its standard spelling,
+    // with a warning when the file writes it otherwise; nothing, reported,
+    // when it doesn't parse.
+    std::optional<std::string> tidy(const std::string& text, const std::string& context);
     std::vector<std::string> resolveElement(const std::string& element, const std::string& context);
     bool readPattern(const std::string& text, Pattern& pattern, const std::string& context);
     std::set<std::string> expandForms(const Json& patterns, const std::string& context);
@@ -515,10 +526,12 @@ void Loader::run(const Json& json) {
 
 void Loader::readFields(const Json& json) {
     if (!json.contains("fields") || !json.at("fields").is_object()) {
+        ProblemsAt const scope(problems, "/fields");
         problems.emplace_back(R"(missing or non-object "fields")");
         return;
     }
     for (const auto& [name, value] : json.at("fields").items()) {
+        ProblemsAt const scope(problems, pointerTo("fields", name));
         fields[name] = readField(name, value, problems);
     }
 }
@@ -528,6 +541,7 @@ void Loader::readFormats(const Json& json) {
         return;
     }
     for (const auto& [name, value] : json.at("formats").items()) {
+        ProblemsAt const scope(problems, pointerTo("formats", name));
         std::string const context = "format '" + name + "'";
         if (!value.is_object()) {
             report(problems, {context, ": must be an object"});
@@ -560,17 +574,35 @@ SetValues Loader::readSet(const Json& json, const std::string& context) {
     return values;
 }
 
+std::optional<std::string> Loader::tidy(const std::string& text, const std::string& context) {
+    std::string error;
+    std::optional<std::string> canonical = canonicalPattern(text, error);
+    if (!canonical) {
+        report(problems, {context, ": '", text, "' isn't an operand pattern (", error, ")"});
+        return std::nullopt;
+    }
+    if (*canonical != text) {
+        problems.warn(cat({context, ": '", text, "' is spelled untidily; read as '", *canonical, "'"}));
+    }
+    return canonical;
+}
+
 void Loader::readModes(const Json& json) {
     if (!json.contains("modes")) {
         return;
     }
-    for (const auto& [mode, value] : json.at("modes").items()) {
-        std::string const context = "mode '" + mode + "'";
-        if (!isModeName(mode)) {
+    for (const auto& [written, value] : json.at("modes").items()) {
+        ProblemsAt const scope(problems, pointerTo("modes", written));
+        std::string const context = "mode '" + written + "'";
+        std::optional<std::string> const mode = tidy(written, context);
+        if (!mode) {
+            continue;
+        }
+        if (!isModeName(*mode)) {
             report(problems, {context, ": isn't an operand mode (words: reg, imm, local, reloc, pc)"});
             continue;
         }
-        modes[mode] = readSet(value, context);
+        modes[*mode] = readSet(value, context);
     }
 }
 
@@ -579,12 +611,19 @@ void Loader::readOperandSets(const Json& json) {
         return;
     }
     for (const auto& [name, value] : json.at("operandSets").items()) {
+        ProblemsAt const scope(problems, pointerTo("operandSets", name));
         bool const allNames = value.is_array() && std::ranges::all_of(value, [](const Json& item) { return item.is_string(); });
         if (!allNames || isModeName(name)) {
             report(problems, {"operand set '", name, "': must be a list of modes or sets, named unlike a mode"});
             continue;
         }
-        operandSets[name] = value.get<std::vector<std::string>>();
+        std::vector<std::string> members;
+        for (const std::string& member : value.get<std::vector<std::string>>()) {
+            if (std::optional<std::string> tidied = tidy(member, "operand set '" + name + "'")) {
+                members.push_back(std::move(*tidied));
+            }
+        }
+        operandSets[name] = std::move(members);
     }
 }
 
@@ -638,8 +677,12 @@ std::set<std::string> Loader::expandForms(const Json& patterns, const std::strin
         return forms;
     }
     for (const Json& entry : patterns) {
+        if (!entry.is_string()) {
+            continue;
+        }
+        std::optional<std::string> const text = tidy(entry.get<std::string>(), context);
         Pattern pattern;
-        if (!entry.is_string() || !readPattern(entry.get<std::string>(), pattern, context)) {
+        if (!text || !readPattern(*text, pattern, context)) {
             continue;
         }
         std::vector<std::string> partial = {""};
@@ -719,9 +762,10 @@ Family Loader::readFamily(const std::string& name, const Json& json) {
         report(problems, {context, R"(: missing or non-object "patterns")"});
         return family;
     }
-    for (const auto& [text, value] : json.at("patterns").items()) {
+    for (const auto& [written, value] : json.at("patterns").items()) {
+        std::optional<std::string> const text = tidy(written, context);
         Pattern pattern;
-        if (readPatternEntry(text, value, cat({context, " pattern '", text, "'"}), pattern)) {
+        if (text && readPatternEntry(*text, value, cat({context, " pattern '", *text, "'"}), pattern)) {
             family.patterns.push_back(std::move(pattern));
         }
     }
@@ -756,6 +800,7 @@ void Loader::readFamilies(const Json& json) {
         return;
     }
     for (const auto& [name, value] : json.at("modeSets").items()) {
+        ProblemsAt const scope(problems, pointerTo("modeSets", name));
         families[name] = readFamily(name, value);
     }
 }
@@ -1020,10 +1065,12 @@ std::string upper(std::string text) {
 
 void Loader::readInstructions(const Json& json) {
     if (!json.contains("instructions") || !json.at("instructions").is_object()) {
+        ProblemsAt const scope(problems, "/instructions");
         problems.emplace_back(R"(missing or non-object "instructions")");
         return;
     }
     for (const auto& [name, value] : json.at("instructions").items()) {
+        ProblemsAt const scope(problems, pointerTo("instructions", name));
         readInstruction(upper(name), value);
     }
 }
@@ -1046,7 +1093,11 @@ void Loader::readInstruction(const std::string& mnemonic, const Json& value) {
     }
     if (value.contains("forms")) {
         for (const auto& [key, override] : value.at("forms").items()) {
-            for (const std::string& form : expandAlternatives(key)) {
+            std::optional<std::string> const tidied = tidy(key, cat({"instruction '", mnemonic, "'"}));
+            if (!tidied) {
+                continue;
+            }
+            for (const std::string& form : expandAlternatives(*tidied)) {
                 readOverride(mnemonic, form, override, instructionSet);
             }
         }
@@ -1151,7 +1202,7 @@ std::vector<std::string> expandAlternatives(const std::string& text) {
     return results;
 }
 
-void InstructionSet::load(const nlohmann::json& json, std::vector<std::string>& problems) {
+void InstructionSet::load(const nlohmann::json& json, Problems& problems) {
     fields.clear();
     encodings.clear();
     if (!json.is_object()) {

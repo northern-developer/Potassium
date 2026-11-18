@@ -119,6 +119,8 @@ def forms_from_ptasm(ptasm, machine_path):
         fail(f"ptasm -I failed:\n{result.stderr}")
     forms = []
     for line in result.stdout.splitlines()[1:]:
+        if line.startswith("Registers: "):  # the register list, not a form
+            continue
         mnemonic, _, form = line.partition(" ")
         forms.append((mnemonic, form.strip()))
     return forms

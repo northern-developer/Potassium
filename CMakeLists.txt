@@ -7,7 +7,7 @@ include(${cpp-library_SOURCE_DIR}/cpp-library.cmake)
 
 cpp_library_enable_dependency_tracking()
 # The release version, set here; ptasm --version reports it.
-set(PTASM_VERSION 0.1.3)
+set(PTASM_VERSION 0.2.1)
 project(ptasm-core VERSION ${PTASM_VERSION} LANGUAGES CXX)
 # cpp-library otherwise takes its version from the latest git tag.
 set(CPP_LIBRARY_VERSION ${PTASM_VERSION})
@@ -28,16 +28,20 @@ if(CMAKE_SIZEOF_VOID_P LESS 8)
         "than 64-bit -- treat this as untested, not unsupported.")
 endif()
 
+# cpp-library's package export (find_package(ptasm)) stays off: ptasm
+# installs as a tool, and its libraries are linked statically inside the
+# project (plan 0.2:E5.A3).
+option(PTASM_INSTALL "Install ptasm-core as a CMake package" OFF)
 cpp_library_setup(
     DESCRIPTION "ptasm core library"
     NAMESPACE ptasm
     HEADERS assembler/Assembler.h assembler/Encoder.h cpu/Form.h assembler/SourceStatement.h assembler/SymbolTable.h assembler/Layout.h assembler/OperandClassifier.h assembler/AsmParser.h assembler/Bom.h writers/ObjectWriter.h writers/BinWriter.h writers/IntelHexWriter.h writers/SRecordWriter.h
             assembler/Diagnostics.h assembler/SyntaxErrorListener.h cpu/InstructionSet.h
             writers/ListingWriter.h writers/ElfWriter.h writers/RecordWriter.h cpu/Machine.h cpu/Cpu.h assembler/Syntax.h cli/Formats.h cli/Cli.h
-    SOURCES assembler/Assembler.cpp assembler/Encoder.cpp cpu/Form.cpp assembler/SymbolTable.cpp assembler/Layout.cpp assembler/OperandClassifier.cpp assembler/AsmParser.cpp assembler/Diagnostics.cpp writers/BinWriter.cpp writers/IntelHexWriter.cpp writers/SRecordWriter.cpp writers/RecordWriter.cpp writers/ListingWriter.cpp
-            writers/ElfWriter.cpp writers/DwarfWriter.cpp cpu/InstructionSet.cpp cpu/Cpu.cpp cli/Formats.cpp cli/Cli.cpp writers/ObjectWriter.cpp
+    SOURCES assembler/Assembler.cpp assembler/Encoder.cpp assembler/SymbolTable.cpp assembler/Layout.cpp assembler/OperandClassifier.cpp assembler/AsmParser.cpp writers/BinWriter.cpp writers/IntelHexWriter.cpp writers/SRecordWriter.cpp writers/RecordWriter.cpp writers/ListingWriter.cpp
+            writers/ElfWriter.cpp writers/DwarfWriter.cpp cli/Formats.cpp cli/Cli.cpp writers/ObjectWriter.cpp
     TESTS test_examples.cpp test_source.cpp test_encoding.cpp test_elf.cpp test_errors.cpp
-          test_instruction_set.cpp test_cli.cpp test_diagnostics.cpp
+          test_instruction_set.cpp test_cli.cpp test_diagnostics.cpp test_machine_file.cpp
     REQUIRES_CPP_VERSION 20
 )
 
@@ -51,6 +55,18 @@ CPMAddPackage(
     # ptasm links the static runtime only.
     OPTIONS "CMAKE_POLICY_VERSION_MINIMUM 3.5" "ANTLR_BUILD_CPP_TESTS OFF" "ANTLR_BUILD_SHARED OFF"
 )
+
+# libptasm: what reads and checks the machine file, shared by ptasm and,
+# later, ptsim and ptllvm (plan 0.2:E5.A3). Linked statically.
+add_library(ptasm-lib STATIC src/cpu/Cpu.cpp src/cpu/Form.cpp src/cpu/InstructionSet.cpp src/cpu/MachineFile.cpp
+                             src/cpu/MachineGrammar.cpp src/assembler/Diagnostics.cpp)
+add_library(ptasm::lib ALIAS ptasm-lib)
+set_target_properties(ptasm-lib PROPERTIES OUTPUT_NAME ptasm)
+target_compile_features(ptasm-lib PUBLIC cxx_std_20)
+target_include_directories(ptasm-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(ptasm-lib PUBLIC nlohmann_json::nlohmann_json)
+target_compile_definitions(ptasm-lib PRIVATE PTASM_VERSION="${PTASM_VERSION}")
+target_link_libraries(ptasm-core PUBLIC ptasm-lib)
 
 target_link_libraries(ptasm-core PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(ptasm-core PRIVATE CLI11::CLI11)
@@ -156,6 +172,14 @@ if(BUILD_TESTING)
                      -DCONFIG=${CMAKE_CURRENT_SOURCE_DIR}/machines/TESTCPU-0.json
                      -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli-errors-block-output
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/cli_errors_block_output.cmake)
+    # A machine file that includes another assembles the same; -MD names both.
+    add_test(NAME machine-file-includes
+             COMMAND ${CMAKE_COMMAND}
+                     -DPTASM=$<TARGET_FILE:ptasm>
+                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/RV32I.asm
+                     -DCONFIG=${CMAKE_CURRENT_SOURCE_DIR}/machines/RV32I.json
+                     -DWORK=${CMAKE_CURRENT_BINARY_DIR}/machine-file-includes
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/machine_file_includes.cmake)
     # Each example with an AT&T twin gives the same output from both.
     add_test(NAME att-twins-match-intel
              COMMAND ${CMAKE_COMMAND}
@@ -494,11 +518,20 @@ endif()
 # developer runs explicitly after editing src/grammar/ptasm.g4. ---
 
 set(ANTLR_GENERATED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/grammar/generated")
+# Two grammars: ptasm.g4, the source language; ptasmMachine.g4, the small
+# languages inside a machine file's strings (plan 0.2:E5.T3).
+set(ANTLR_GRAMMARS ptasm ptasmMachine)
 set(ANTLR_GENERATED_SOURCES
     "${ANTLR_GENERATED_DIR}/ptasmLexer.cpp"
     "${ANTLR_GENERATED_DIR}/ptasmParser.cpp"
     "${ANTLR_GENERATED_DIR}/ptasmBaseVisitor.cpp"
     "${ANTLR_GENERATED_DIR}/ptasmVisitor.cpp"
+)
+set(ANTLR_MACHINE_GENERATED_SOURCES
+    "${ANTLR_GENERATED_DIR}/ptasmMachineLexer.cpp"
+    "${ANTLR_GENERATED_DIR}/ptasmMachineParser.cpp"
+    "${ANTLR_GENERATED_DIR}/ptasmMachineBaseVisitor.cpp"
+    "${ANTLR_GENERATED_DIR}/ptasmMachineVisitor.cpp"
 )
 
 add_library(ptasm-asm-generated STATIC ${ANTLR_GENERATED_SOURCES})
@@ -507,19 +540,27 @@ target_link_libraries(ptasm-asm-generated PUBLIC antlr4_static)
 
 target_link_libraries(ptasm-core PUBLIC ptasm-asm-generated)
 
-# Non-fatal staleness check: warn (don't block the build) if ptasm.g4 has
+add_library(ptasm-machine-generated STATIC ${ANTLR_MACHINE_GENERATED_SOURCES})
+target_include_directories(ptasm-machine-generated PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src/grammar")
+target_link_libraries(ptasm-machine-generated PUBLIC antlr4_static)
+
+target_link_libraries(ptasm-lib PRIVATE ptasm-machine-generated)
+
+# Non-fatal staleness check: warn (don't block the build) if a grammar has
 # changed since src/grammar/generated/ was last regenerated.
-set(ANTLR_GRAMMAR "${CMAKE_CURRENT_SOURCE_DIR}/src/grammar/ptasm.g4")
-set(ANTLR_GRAMMAR_HASH_FILE "${ANTLR_GENERATED_DIR}/.ptasm.g4.sha256")
-file(SHA256 "${ANTLR_GRAMMAR}" ANTLR_GRAMMAR_CURRENT_HASH)
-if(EXISTS "${ANTLR_GRAMMAR_HASH_FILE}")
-    file(STRINGS "${ANTLR_GRAMMAR_HASH_FILE}" ANTLR_GRAMMAR_RECORDED_HASH LIMIT_COUNT 1)
-else()
-    set(ANTLR_GRAMMAR_RECORDED_HASH "")
-endif()
-if(NOT ANTLR_GRAMMAR_CURRENT_HASH STREQUAL ANTLR_GRAMMAR_RECORDED_HASH)
-    message(WARNING "src/grammar/ptasm.g4 has changed since src/grammar/generated/ was last regenerated. Run `cmake --build <build-dir> --target regen-parser` and commit the result.")
-endif()
+foreach(grammar IN LISTS ANTLR_GRAMMARS)
+    set(grammar_file "${CMAKE_CURRENT_SOURCE_DIR}/src/grammar/${grammar}.g4")
+    set(hash_file "${ANTLR_GENERATED_DIR}/.${grammar}.g4.sha256")
+    file(SHA256 "${grammar_file}" current_hash)
+    if(EXISTS "${hash_file}")
+        file(STRINGS "${hash_file}" recorded_hash LIMIT_COUNT 1)
+    else()
+        set(recorded_hash "")
+    endif()
+    if(NOT current_hash STREQUAL recorded_hash)
+        message(WARNING "src/grammar/${grammar}.g4 has changed since src/grammar/generated/ was last regenerated. Run `cmake --build <build-dir> --target regen-parser` and commit the result.")
+    endif()
+endforeach()
 
 # --- regen-parser: explicit, developer-triggered regeneration. Requires Java. ---
 
@@ -529,20 +570,29 @@ set(ANTLR_JAR_SHA256 "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125
 set(ANTLR_JAR "${CMAKE_CURRENT_BINARY_DIR}/antlr-${ANTLR_JAR_VERSION}-complete.jar")
 
 if(Java_JAVA_EXECUTABLE)
-    add_custom_target(regen-parser
+    set(regen_commands
         COMMAND ${CMAKE_COMMAND} -E make_directory "${ANTLR_GENERATED_DIR}"
         COMMAND ${CMAKE_COMMAND}
             -D "ANTLR_JAR=${ANTLR_JAR}"
             -D "ANTLR_JAR_VERSION=${ANTLR_JAR_VERSION}"
             -D "ANTLR_JAR_SHA256=${ANTLR_JAR_SHA256}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchAntlrJar.cmake"
-        COMMAND ${Java_JAVA_EXECUTABLE} -jar "${ANTLR_JAR}" -Dlanguage=Cpp -visitor -no-listener
-                "${ANTLR_GRAMMAR}" -o "${ANTLR_GENERATED_DIR}"
-        COMMAND ${CMAKE_COMMAND}
-            -D "ANTLR_GRAMMAR=${ANTLR_GRAMMAR}"
-            -D "ANTLR_GRAMMAR_HASH_FILE=${ANTLR_GRAMMAR_HASH_FILE}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/UpdateGrammarHash.cmake"
-        COMMENT "Regenerating ANTLR parser from ptasm.g4 (writes into ${ANTLR_GENERATED_DIR}; review and commit the diff)"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchAntlrJar.cmake")
+    foreach(grammar IN LISTS ANTLR_GRAMMARS)
+        # Relative paths, from the source folder: the generated files'
+        # "Generated from" line then names src/grammar/<grammar>.g4, not a
+        # path on this machine.
+        list(APPEND regen_commands
+            COMMAND ${Java_JAVA_EXECUTABLE} -jar "${ANTLR_JAR}" -Dlanguage=Cpp -visitor -no-listener
+                    -Xexact-output-dir "src/grammar/${grammar}.g4" -o "src/grammar/generated"
+            COMMAND ${CMAKE_COMMAND}
+                -D "ANTLR_GRAMMAR=${CMAKE_CURRENT_SOURCE_DIR}/src/grammar/${grammar}.g4"
+                -D "ANTLR_GRAMMAR_HASH_FILE=${ANTLR_GENERATED_DIR}/.${grammar}.g4.sha256"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/UpdateGrammarHash.cmake")
+    endforeach()
+    add_custom_target(regen-parser
+        ${regen_commands}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Regenerating the ANTLR parsers from ${ANTLR_GRAMMARS} (writes into ${ANTLR_GENERATED_DIR}; review and commit the diff)"
         VERBATIM
     )
 else()
@@ -595,5 +645,5 @@ add_custom_target(run-my-source
 # apply to every target in the whole build tree, which is exactly that
 # mistake; setting the property only on these targets avoids it.
 if(DEFINED PTASM_CLANG_TIDY)
-    set_target_properties(ptasm-core ptasm test_examples test_source test_encoding test_elf test_errors PROPERTIES CXX_CLANG_TIDY "${PTASM_CLANG_TIDY}")
+    set_target_properties(ptasm-lib ptasm-core ptasm test_examples test_source test_encoding test_elf test_errors test_machine_file PROPERTIES CXX_CLANG_TIDY "${PTASM_CLANG_TIDY}")
 endif()

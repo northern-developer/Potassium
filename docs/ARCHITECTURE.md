@@ -42,10 +42,18 @@ encoder never sees the command line.
 | `src/cpu/` | `Cpu` and `Machine` (`loadCpuFile`, `loadCpu`), `InstructionSet` (fields, formats, modes, mode sets, instructions; every form built and checked at load), `Form`. |
 | `src/assembler/` | `AsmParser`, `Assembler`, `SymbolTable`, `Layout`, `OperandClassifier`, `Encoder`, `Diagnostics`, and the data types (`Bom.h`, `SourceStatement.h`). |
 | `src/writers/` | `ObjectWriter` and one writer per format: `BinWriter`, `RecordWriter` (`IntelHexWriter`, `SRecordWriter`), `ElfWriter` (with `-g`, the DWARF sections `buildDwarf` makes, `Dwarf.h`), `ListingWriter`. |
-| `src/grammar/` | `ptasm.g4` and its committed generated parser (`generated/`, rebuilt by the `regen-parser` target). |
+| `src/grammar/` | `ptasm.g4` (the source language) and `ptasmMachine.g4` (the small languages inside a machine file's strings: operand patterns, semantics, conditions, `becomes` text), with their committed generated parsers (`generated/`, rebuilt by the `regen-parser` target). |
 | `include/ptasm/` | Headers, mirroring `src/`. |
 | `machines/` | The cpu.json files `-m` loads, and `cpu_schema.json`. |
 | `tests/` | doctest suites, `tests/cmake/` scripted checks, `fixtures/`, `golden/`, `link/`. |
+
+Two static libraries. **`libptasm`** (the CMake target `ptasm-lib`) is
+what reads and checks the machine file: `src/cpu/` (with
+`MachineGrammar`, over `ptasmMachine.g4`'s parser) and `Diagnostics`.
+It depends on nothing else here, so the planned writers, `ptsim` and
+`ptllvm`, can link it alone. `ptasm-core` is the assembler, the
+writers and the command line, on top of it; the `ptasm` executable is
+`main` over both.
 
 ## 3. Data model
 

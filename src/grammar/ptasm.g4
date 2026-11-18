@@ -101,15 +101,32 @@ operandList
     : (operand WS? ( ',' WS? operand )*)?
     ;
 
+// A register is a name (E1.T1): R<n>, PC, or a name in the machine
+// file's register list. The grammar can't tell a register from a label,
+// so an operand is a value, or a bracketed address with its terms in any
+// order; AsmParser sets its mode from which terms are registers.
 operand
-    : register
-    | registerIndirect
-    | value
-    | direct
-    | indexed
-    | indexedIndirect
-    | relative
-    | relativeIndirect
+    : value
+    | memory
+    | memoryIndirect
+    ;
+
+memory
+    : '[' WS? address WS? ']'
+    ;
+
+memoryIndirect
+    : '[' WS? '[' WS? address WS? ']' WS? ']'
+    ;
+
+// [BX + 4], [4 + BX], [msg + BX], [R10 + %lo(msg)]: each term with the
+// sign before it.
+address
+    : addressTerm (WS? ('+' | '-') WS? addressTerm)*
+    ;
+
+addressTerm
+    : '-'? WS? (addressPart | registerTerm | name | number)
     ;
 
 // An operand's number, or one part of an address written PART(expr):
@@ -123,42 +140,20 @@ value
 addressPart
     : '%'? name WS? '(' WS? expression WS? ')'
     ;
-    
-register
+
+// R<n> and PC are always registers; a list name is a `name`, told apart
+// in AsmParser.
+registerTerm
     : REG
-    ;
-    
-registerIndirect
-    : '[' WS? REG WS? ']'
+    | PC
     ;
 
 // A sum of names and numbers; the first may be negated (`-16`, `-msg + 4`).
+// A register here is a register operand when it stands alone, and an
+// error anywhere else (registers aren't values).
 expression
-    : '-'? WS? (name | number)
-    | expression WS? ( '+'| '-') WS? (name | number)
-    ;
-    
-direct
-    : '[' WS? value WS? ']'
-    ;
-    
-indexed
-    : '[' WS? REG WS? ('+'| '-') WS? value WS? ']'
-    ;
-    
-indexedIndirect
-    : '[' WS? '[' WS? REG WS? 
-    ('+'| '-') WS? value WS? 
-    WS? ']' WS? ']'
-    ;
-    
-relative
-    : '[' WS? PC WS? ('+'| '-')
-    WS? value WS? ']'
-    ;
-    
-relativeIndirect
-    : '[' WS? relative WS? ']'
+    : '-'? WS? (name | number | registerTerm)
+    | expression WS? ( '+'| '-') WS? (name | number | registerTerm)
     ;
 
 // AT&T addressing modes (ROADMAP.md's Ticket 4 "addressing-mode
@@ -180,7 +175,6 @@ attOperand
     | attImmediate
     | attIndirectTarget
     | attScaledIndex
-    | attRelative
     | attIndexed
     | attRegisterIndirect
     | value
@@ -191,25 +185,27 @@ attDisplacement
     : value
     ;
 
+// %R5, %PC, or %name from the register list (E1.T1 decision 7).
+attReg
+    : '%' (REG | PC | NAME)
+    ;
+
 attRegister
-    : '%' REG
+    : attReg
     ;
 
 attRegisterIndirect
-    : '(' WS? '%' REG WS? ')'
+    : '(' WS? attReg WS? ')'
     ;
 
 attImmediate
     : '$' value
     ;
 
+// `disp(%reg)`; with the program counter (`disp(%rip)`), PC-relative,
+// Intel's `[RIP + disp]`.
 attIndexed
-    : attDisplacement WS? '(' WS? '%' REG WS? ')'
-    ;
-
-// `disp(%rip)`: PC-relative, Intel's `[RIP + disp]`.
-attRelative
-    : attDisplacement WS? '(' WS? '%' PC WS? ')'
+    : attDisplacement WS? '(' WS? attReg WS? ')'
     ;
 
 // `disp(base, index, scale)` -- the one real mode with no single ptasm
@@ -220,7 +216,7 @@ attRelative
 // real AT&T form exactly (displacement, base register, index register,
 // and a constant scale, in that order).
 attScaledIndex
-    : attDisplacement WS? '(' WS? '%' REG WS? ',' WS? '%' REG WS? ',' WS? number WS? ')'
+    : attDisplacement WS? '(' WS? attReg WS? ',' WS? attReg WS? ',' WS? number WS? ')'
     ;
 
 // `*%reg`: AT&T's explicit indirect jump/call target marker -- not its
@@ -228,7 +224,7 @@ attScaledIndex
 // `(%reg)` (see the reference table) once the Visitor-side mapping for
 // it exists.
 attIndirectTarget
-    : '*' WS? '%' REG
+    : '*' WS? attReg
     ;
 
 string_
@@ -326,14 +322,11 @@ SPACE
     : '.SPACE'
     ;
 
-// Both spellings accepted, per the user: PC (this project's own original
-// convention, every existing example file uses it) and RIP (the real
-// MASM64/x86-64 term for the same thing -- see docs/USERS_GUIDE.md).
-// Same mechanism as GLOBAL's two spellings (.GLOBAL/.GLOBL) -- no
-// Visitor.cpp change needed, ctx->PC() returns the matched terminal
-// regardless of which literal spelling was actually used.
+// The program counter on every CPU (E1.T1 decision 17). Other spellings
+// of it (AMD64's RIP) are entries in the machine file's register list,
+// with the pc role.
 PC
-    : 'PC' | 'RIP'
+    : 'PC'
     ;
 
 

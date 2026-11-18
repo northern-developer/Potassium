@@ -2,8 +2,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -15,7 +17,6 @@
 #include "ptasm/assembler/Diagnostics.h"
 
 #include "ptasm/assembler/Syntax.h"
-#include <sys/types.h>
 #include <nlohmann/json_fwd.hpp>
 
 #include "harness.h"
@@ -66,7 +67,7 @@ TEST_CASE("Non-ASCII input: fine in comments and strings, a syntax error elsewhe
     const Bom bom = assembleText(".ORG 0\n-- \xCF\x80 in a comment\ns: .ASCIZ \"h\xC3\xA9\"\n", base + "/machines/TESTCPU-0.json",
                                  diagnosticsText);
     CHECK(diagnosticsText.empty());
-    CHECK(bom.sections.front().lines.back().bytes == std::vector<u_char>{'h', 0xC3, 0xA9, 0});
+    CHECK(bom.sections.front().lines.back().bytes == std::vector<std::uint8_t>{'h', 0xC3, 0xA9, 0});
     // A character outside the source language is reported at its line and column.
     assembleText(".ORG 0\nAAB \xC3\xA9\n", base + "/machines/TESTCPU-0.json", diagnosticsText);
     CHECK(diagnosticsText.find("test.asm:2:5: error: token recognition error at: '\xC3\xA9'") != std::string::npos);
@@ -104,9 +105,9 @@ TEST_CASE("Subtraction subtracts: in expressions and in bracketed [X - n] operan
     REQUIRE(bom.sections.size() == 1);
     const std::vector<Statement>& lines = bom.sections.front().lines;
     REQUIRE(lines.size() == 3);
-    CHECK(lines[0].bytes == std::vector<u_char>{0x0d, 0x00, 0x00, 0x0a});
-    CHECK(lines[1].bytes == std::vector<u_char>{0x1f, 0x00, 0xff, 0xfc});
-    CHECK(lines[2].bytes == std::vector<u_char>{0x16, 0x02, 0x00, 0x04});
+    CHECK(lines[0].bytes == std::vector<std::uint8_t>{0x0d, 0x00, 0x00, 0x0a});
+    CHECK(lines[1].bytes == std::vector<std::uint8_t>{0x1f, 0x00, 0xff, 0xfc});
+    CHECK(lines[2].bytes == std::vector<std::uint8_t>{0x16, 0x02, 0x00, 0x04});
 }
 
 TEST_CASE(".bss holds only .SPACE and .ALIGN") {
@@ -135,15 +136,15 @@ TEST_CASE("Unary minus: an expression's first term may be negated, in operands, 
                            base + "/machines/RV32I.json", diagnosticsText);
     CHECK(diagnosticsText.empty());
     // riscv64-unknown-elf-as: addi sp,sp,-16; addi sp,sp,-6; lw ra,4(sp); sw ra,-8(sp)
-    CHECK(bom.sections[0].lines[0].bytes == std::vector<u_char>{0x13, 0x01, 0x01, 0xff});
-    CHECK(bom.sections[0].lines[1].bytes == std::vector<u_char>{0x13, 0x01, 0xa1, 0xff});
-    CHECK(bom.sections[0].lines[2].bytes == std::vector<u_char>{0x83, 0x20, 0x41, 0x00});
-    CHECK(bom.sections[0].lines[3].bytes == std::vector<u_char>{0x23, 0x2c, 0x11, 0xfe});
-    CHECK(bom.sections[1].lines[0].bytes == std::vector<u_char>{0xff, 0xff, 0xff, 0xff, 0x05, 0x00, 0x00, 0x00});
+    CHECK(bom.sections[0].lines[0].bytes == std::vector<std::uint8_t>{0x13, 0x01, 0x01, 0xff});
+    CHECK(bom.sections[0].lines[1].bytes == std::vector<std::uint8_t>{0x13, 0x01, 0xa1, 0xff});
+    CHECK(bom.sections[0].lines[2].bytes == std::vector<std::uint8_t>{0x83, 0x20, 0x41, 0x00});
+    CHECK(bom.sections[0].lines[3].bytes == std::vector<std::uint8_t>{0x23, 0x2c, 0x11, 0xfe});
+    CHECK(bom.sections[1].lines[0].bytes == std::vector<std::uint8_t>{0xff, 0xff, 0xff, 0xff, 0x05, 0x00, 0x00, 0x00});
     bom = assembleText(".TEXT\nADDI $-16, %R2, %R2\n", base + "/machines/RV32I.json", diagnosticsText,
                        {.syntax = Syntax::att});
     CHECK(diagnosticsText.empty());
-    CHECK(allBytes(bom) == std::vector<u_char>{0x13, 0x01, 0x01, 0xff});
+    CHECK(allBytes(bom) == std::vector<std::uint8_t>{0x13, 0x01, 0x01, 0xff});
     assembleText(".TEXT\nADDI R2, R2, - -16\n", base + "/machines/RV32I.json", diagnosticsText);
     CHECK_FALSE(diagnosticsText.empty()); // one minus, on the first term only
 }
@@ -153,7 +154,7 @@ TEST_CASE("Data directives take expressions; values follow the field-fit rule") 
     const Bom bom = assembleText(".ORG 0\na: NOP\nb: .WORD b - a, 0 - 1, 0xFFFF, b + 2\n.LONG 0 - 2\n",
                                  dataCpu(kAddress16), diagnosticsText);
     CHECK(diagnosticsText.empty());
-    CHECK(allBytes(bom) == std::vector<u_char>{0x00, 0x01, 0x00, 0xff, 0xff, 0xff, 0xff, 0x03, 0x00, 0xfe, 0xff,
+    CHECK(allBytes(bom) == std::vector<std::uint8_t>{0x00, 0x01, 0x00, 0xff, 0xff, 0xff, 0xff, 0x03, 0x00, 0xfe, 0xff,
                                                0xff, 0xff});
     assembleText(".WORD 0x12345\n.ADDR 0x10000\n.ADDR 0 - 1\n", dataCpu(kAddress16), diagnosticsText);
     CHECK(diagnosticsText == "test.asm:1: error: 74565 doesn't fit a 2-byte slot\n"
@@ -196,7 +197,7 @@ TEST_CASE("AT&T's .dc.a is .ADDR") {
     std::string diagnosticsText;
     const Bom bom = assembleText(".ORG 0x10\nhere: .dc.a here\n", dataCpu(kAddress16), diagnosticsText, {.syntax = Syntax::att});
     CHECK(diagnosticsText.empty());
-    CHECK(allBytes(bom) == std::vector<u_char>{0x10, 0x00});
+    CHECK(allBytes(bom) == std::vector<std::uint8_t>{0x10, 0x00});
 }
 
 TEST_CASE("The last line needn't end with a newline, in both grammars") {
@@ -296,3 +297,94 @@ TEST_CASE(".SET is redefinable and a use sees the value set before it") {
     assembleText(".ORG 0\nX .SET 5\n    AAD x\n", base + "/machines/TESTCPU-0.json", diagnosticsText, {.syntax = Syntax::att});
     CHECK(diagnosticsText.find("test.asm:3: error: undefined symbol 'x'\n") != std::string::npos);
 }
+
+namespace {
+
+std::vector<std::uint8_t> bytesOf(const Bom& bom) {
+    std::vector<std::uint8_t> bytes;
+    for (const Section& section : bom.sections) {
+        for (const Statement& line : section.lines) {
+            bytes.insert(bytes.end(), line.bytes.begin(), line.bytes.end());
+        }
+    }
+    return bytes;
+}
+
+std::string amd64() { return std::string(PTASM_SOURCE_DIR) + "/machines/AMD64.json"; }
+
+bool says(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
+
+} // namespace
+
+TEST_CASE("Register names: AMD64's names and R<n> give the same bytes, in any case; regEntry records the name") {
+    std::string numberedText;
+    std::string namedText;
+    const Bom numbered = assembleText(".TEXT\nPUSH R3\nMOV R3, R7\nAND R0, R3\nPOP R3\n", amd64(), numberedText);
+    const Bom named = assembleText(".TEXT\nPUSH rbx\nMOV RBX, rdi\nAND RAX, Rbx\nPOP RBX\n", amd64(), namedText);
+    CHECK(numberedText.empty());
+    CHECK(namedText.empty());
+    CHECK(bytesOf(named) == bytesOf(numbered));
+    const std::vector<Operand>& written = instructionOf(named.sections.front().lines[1])->operands;
+    REQUIRE(written.size() == 2);
+    std::optional<uint16_t> const entry = written[0].regEntry;
+    REQUIRE(entry.has_value());
+    if (entry) {
+        CHECK(named.machine.registers[*entry].name == "RBX");
+    }
+    CHECK_FALSE(instructionOf(numbered.sections.front().lines[1])->operands[0].regEntry.has_value());
+}
+
+TEST_CASE("Register names: RIP is AMD64's program counter by its role, as PC is on every CPU") {
+    std::string ripText;
+    std::string pcText;
+    std::string const data = ".DATA\nmsg: .QUAD 0\n";
+    const Bom rip = assembleText(".TEXT\nLEA R6, [RIP + msg]\n" + data, amd64(), ripText, {.format = "elf"});
+    const Bom pc = assembleText(".TEXT\nLEA R6, [PC + msg]\n" + data, amd64(), pcText, {.format = "elf"});
+    const Bom any = assembleText(".TEXT\nLEA RSI, [msg + RIP]\n" + data, amd64(), pcText, {.format = "elf"});
+    CHECK(ripText.empty());
+    CHECK(pcText.empty());
+    CHECK(bytesOf(rip) == bytesOf(pc));
+    CHECK(bytesOf(any) == bytesOf(rip)); // terms in any order (decision 4)
+}
+
+TEST_CASE("Register names: AT&T's %name, and disp(%rip)") {
+    const AssembleOptions att{.syntax = Syntax::att, .format = "elf"};
+    std::string numberedText;
+    std::string namedText;
+    const Bom numbered = assembleText(".TEXT\nmov %R7, %R3\nlea msg(%PC), %R6\n.DATA\nmsg: .QUAD 0\n", amd64(), numberedText, att);
+    const Bom named = assembleText(".TEXT\nmov %rdi, %rbx\nlea msg(%rip), %rsi\n.DATA\nmsg: .QUAD 0\n", amd64(), namedText, att);
+    CHECK(numberedText.empty());
+    CHECK(namedText.empty());
+    CHECK(bytesOf(named) == bytesOf(numbered));
+    std::string unknownText;
+    std::ignore = assembleText(".TEXT\nmov %rzz, %rbx\n", amd64(), unknownText, att);
+    CHECK(says(unknownText, "'%rzz' isn't a register"));
+}
+
+TEST_CASE("Register names: a register can't be a label, a constant, a symbol or a value") {
+    std::string text;
+    std::ignore = assembleText(".TEXT\nRAX: RET\nRBX .EQU 4\n.GLOBAL RCX\nK .EQU RDX + 1\n.QUAD RSI\nMOV R0, RDI + 2\n",
+                               amd64(), text);
+    CHECK(says(text, "'RAX' is a register; it can't be a label"));
+    CHECK(says(text, "'RBX' is a register; it can't be a constant"));
+    CHECK(says(text, "'RCX' is a register; it can't be a symbol"));
+    CHECK(says(text, "'RDX' is a register; it can't be a value"));
+    CHECK(says(text, "'RSI' is a register; it can't be a value"));
+    CHECK(says(text, "'RDI' is a register; it can't be part of a value"));
+    CHECK_FALSE(says(text, "undefined symbol 'RDX'")); // reported once, as a register
+    std::ignore = assembleText(".TEXT\nR3: RET\n", amd64(), text); // R<n> is never a name: a syntax error
+    CHECK(says(text, "error"));
+}
+
+TEST_CASE("Register names: two registers, a subtracted register, [[reg]], and [[value]] are errors") {
+    std::string text;
+    std::ignore = assembleText(".TEXT\nMOV R3, [RBX + RCX]\n", amd64(), text);
+    CHECK(says(text, "two registers in one operand"));
+    std::ignore = assembleText(".TEXT\nMOV R3, [4 - RBX]\n", amd64(), text);
+    CHECK(says(text, "'RBX' is a register; it can't be subtracted"));
+    std::ignore = assembleText(".TEXT\nMOV R3, [[RBX]]\n", amd64(), text);
+    CHECK(says(text, "[[RBX]] isn't an addressing mode"));
+    std::ignore = assembleText(".TEXT\nMOV R3, [[8]]\n", amd64(), text);
+    CHECK(says(text, "[[...]] needs a register or PC inside"));
+}
+

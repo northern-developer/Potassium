@@ -5,7 +5,6 @@
 #include <optional>
 #include <set>
 #include <string>
-#include <sys/types.h>
 #include <variant>
 #include <vector>
 
@@ -96,6 +95,11 @@ struct Operand{
 	// addresses -- even for same-file references. Empty: a plain constant
 	// to bake in as-is.
 	std::optional<SymbolRef> symbolRef;
+
+	// The register-list entry a register operand was written as (an index
+	// into Machine::registers); empty when written as R<n>, or with no
+	// list. `value` keeps the register's number (plan 0.2:E1.T1).
+	std::optional<uint16_t> regEntry;
 };
 
 // A field or data slot the linker must fill in: `size` bytes at
@@ -127,7 +131,7 @@ struct Relocation {
 	// relocation is then the whole instruction (`offset` 0, `size` its
 	// bytes), and these are the field's bits in it, in the stored byte
 	// order. A RELA object clears them and keeps the rest.
-	std::vector<u_char> fieldMask;
+	std::vector<std::uint8_t> fieldMask;
 };
 
 // The kinds of line that become bytes; what they share is in Statement.
@@ -160,7 +164,7 @@ struct Statement {
 	int64_t address{};
 	// An instruction's is chosen with its form before its bytes exist.
 	size_t size{};
-	std::vector<u_char> bytes;
+	std::vector<std::uint8_t> bytes;
 	// 1-based source line this Statement was built from.
 	size_t lineNumber{};
 	// What this line needs a linker for, recorded while encoding; each

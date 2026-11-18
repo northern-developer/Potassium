@@ -3,25 +3,93 @@
   "title": "ptasm machine file: a CPU, its ELF settings and its instruction encodings",
   "description": "Structure only. Cross-references (a format's fields exist, every field of a chosen format is filled exactly once, ...) are checked when ptasm loads the file.",
   "type": "object",
-  "required": ["cpuName", "description", "fields", "instructions"],
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string", "description": "The schema an editor checks this file against: cpu_schema.json, by path or URL." },
+    "include": {
+      "type": "array", "items": { "type": "string" },
+      "description": "The machine files this one builds on, merged first, in order, each relative to this file's folder."
+    },
+    "replace": {
+      "type": "object",
+      "description": "Changes to what the includes give, shaped like the file; null removes a key."
+    },
+    "models": {
+      "type": "object",
+      "description": "Named variants: each a container of fields, formats, modes, operandSets, modeSets and instructions, with its own \"replace\", building on other models by \"base\".",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "base": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
+          "registers": { "type": "object" },
+          "replace": { "type": "object" },
+          "fields": { "type": "object" }, "formats": { "type": "object" }, "modes": { "type": "object" },
+          "operandSets": { "type": "object" }, "modeSets": { "type": "object" }, "instructions": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "defaultModel": {
+      "type": "string",
+      "description": "The model applied unless another is chosen: one of the models, or the cpuName for the globals alone. Required with models."
+    },
     "cpuName": { "type": "string" },
     "maxOperands": { "type": "integer", "minimum": 2, "maximum": 9 },
-    "description": { "$ref": "#/$defs/description" },
-    "elf": { "$ref": "#/$defs/elf" },
-    "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/field" } },
-    "formats": { "type": "object", "additionalProperties": { "$ref": "#/$defs/layout" } },
-    "modes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/setValues" } },
-    "operandSets": {
+    "description": { "type": "object" },
+    "elf": { "type": "object" },
+    "registers": {
       "type": "object",
-      "additionalProperties": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      "description": "The register list: each name, with its number, or an object.",
+      "additionalProperties": { "$ref": "#/$defs/register" }
     },
-    "modeSets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/family" } },
-    "instructions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/instruction" } }
+    "fields": { "type": "object" },
+    "formats": { "type": "object" },
+    "modes": { "type": "object" },
+    "operandSets": { "type": "object" },
+    "modeSets": { "type": "object" },
+    "instructions": { "type": "object" }
+  },
+  "if": { "required": ["cpuName"], "not": { "required": ["include"] } },
+  "then": {
+    "description": "A complete machine file, standing alone: its whole structure. A file with \"include\", or a fragment (no \"cpuName\"), is an overlay: ptasm checks the merged result.",
+    "required": ["cpuName", "description", "fields", "instructions"],
+    "properties": {
+      "description": { "$ref": "#/$defs/description" },
+      "elf": { "$ref": "#/$defs/elf" },
+      "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/field" } },
+      "formats": { "type": "object", "additionalProperties": { "$ref": "#/$defs/layout" } },
+      "modes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/setValues" } },
+      "operandSets": {
+        "type": "object",
+        "additionalProperties": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      },
+      "modeSets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/family" } },
+      "instructions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/instruction" } }
+    }
   },
   "$defs": {
+    "register": {
+      "description": "A register's name: its number (\"BX\": 3), or an object. In the object, a general register has a number; the program counter may have none (role pc); a register outside the general ones has a space and an index there; a part of another names its parent, its lsb there and how writing it treats the rest; an alias names the register it is another name for, and nothing else.",
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "number": { "type": "integer", "minimum": 0 },
+            "bits": { "type": "integer", "minimum": 1, "maximum": 64 },
+            "role": { "enum": ["pc", "sp", "link", "flags"] },
+            "const": { "type": "integer" },
+            "space": { "type": "string" },
+            "index": { "type": "integer", "minimum": 0 },
+            "parent": { "type": "string" },
+            "lsb": { "type": "integer", "minimum": 0 },
+            "writes": { "enum": ["merge", "zeroExtend"] },
+            "alias": { "type": "string" }
+          }
+        }
+      ]
+    },
     "value": {
       "description": "A constant: \"0b0101\", \"0x10\", or a non-negative integer.",
       "oneOf": [
@@ -36,6 +104,7 @@
       "additionalProperties": false,
       "properties": {
         "regCount": { "type": "integer", "minimum": 0 },
+        "regBits": { "type": "integer", "minimum": 1, "maximum": 64 },
         "addressBits": { "type": "integer", "minimum": 1, "maximum": 64 },
         "byteOrder": { "enum": ["little", "big"] },
         "relOffset": { "enum": ["before", "after"] }
@@ -49,6 +118,7 @@
         "eMachine": { "type": "integer", "minimum": 0 },
         "elfClass": { "enum": [32, 64] },
         "relocationFormat": { "enum": ["rela", "rel"] },
+        "globalJumps": { "enum": ["relocate", "resolve"] },
         "relocations": {
           "type": "object",
           "propertyNames": { "pattern": "^(addr[0-9]*(:signed)?|pcrel[0-9]*(:call|:jump)?)$" },

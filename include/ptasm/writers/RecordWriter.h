@@ -4,7 +4,6 @@
 #include <ostream>
 #include <span>
 #include <string_view>
-#include <sys/types.h>
 #include <vector>
 
 #include "ptasm/assembler/Bom.h"
@@ -29,7 +28,7 @@ protected:
 	// One data record's worth of bytes.
 	struct Record {
 		uint32_t address{};
-		std::span<const u_char> bytes;
+		std::span<const std::uint8_t> bytes;
 	};
 
 	// Every line's bytes in order, split so that no record holds more than

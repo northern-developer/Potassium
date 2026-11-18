@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <set>
@@ -11,7 +12,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <sys/types.h>
 #include <variant>
 
 #include "ptasm/assembler/Bom.h"
@@ -42,7 +42,7 @@ Parsed parse(const std::array<const char*, N>& args) {
 }
 
 constexpr int kAddressBits = 16;
-constexpr u_char kRet = 0xC3; // x86 RET
+constexpr std::uint8_t kRet = 0xC3; // x86 RET
 
 // A one-instruction build every writer can write.
 Bom tinyBom() {
@@ -209,6 +209,18 @@ TEST_CASE("Cli: -MD names the rule's file after the output; -MF names it; -MF ne
     const Parsed named = parse(std::array{"prog.asm", "-o", "-", "-MD", "-MF", "-"});
     REQUIRE(std::holds_alternative<Options>(named.result));
     CHECK(std::get<Options>(named.result).dependencyPath == "-");
+}
+
+TEST_CASE("Cli: --origins goes with -I; --dump-machine needs no source") {
+    const Parsed alone = parse(std::array{"--origins", "-m", "RV32I"});
+    REQUIRE(std::holds_alternative<int>(alone.result));
+    CHECK(alone.err == "--origins: only with -I\n");
+    const Parsed origins = parse(std::array{"-I", "--origins", "-m", "RV32I"});
+    REQUIRE(std::holds_alternative<Options>(origins.result));
+    CHECK(std::get<Options>(origins.result).origins);
+    const Parsed dump = parse(std::array{"--dump-machine", "-m", "RV32I"});
+    REQUIRE(std::holds_alternative<Options>(dump.result));
+    CHECK(std::get<Options>(dump.result).dumpMachine);
 }
 
 TEST_CASE("Cli: --list-machines needs no source; every folder is listed, the source tree's last") {

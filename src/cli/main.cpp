@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -7,15 +10,19 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "ptasm/assembler/Bom.h"
 #include "ptasm/writers/ObjectWriter.h"
 #include "ptasm/cli/Cli.h"
 #include "ptasm/assembler/Assembler.h"
 #include "ptasm/cpu/Cpu.h"
+#include "ptasm/cpu/Machine.h"
+#include "ptasm/cpu/MachineFile.h"
 #include "ptasm/assembler/Diagnostics.h"
 #include "ptasm/cli/Formats.h"
 #include "ptasm/writers/ListingWriter.h"
@@ -35,15 +42,108 @@ std::string openFailureReason(const std::string& path) {
     return "could not be opened (check its permissions)";
 }
 
+// How -I --origins tells an instruction's history: the file (and model)
+// that defined it, then each file that changed or removed it.
+std::string originsOf(const std::vector<Change>& changes) {
+    std::string text;
+    for (const Change& change : changes) {
+        std::string const who = change.file + (change.model.empty() ? "" : " (model " + change.model + ")");
+        if (!text.empty()) {
+            text += "; ";
+        }
+        if (change.action == "changed") {
+            text += "changed by " + who;
+        } else if (change.action == "removed") {
+            text += "removed by " + who;
+        } else {
+            text += (text.empty() ? "" : "defined again by ") + who;
+        }
+    }
+    return text;
+}
+
+// -I --origins' registers: each name, with where it came from.
+void printRegisterOrigins(const LoadedCpu& loaded) {
+    if (loaded.registerHistory.empty()) {
+        return;
+    }
+    constexpr std::string_view kRemoved = " (removed)";
+    std::cout << "Registers:\n";
+    size_t width = 0;
+    for (const auto& [name, changes] : loaded.registerHistory) {
+        width = std::max(width, name.size() + kRemoved.size());
+    }
+    for (const auto& [name, changes] : loaded.registerHistory) {
+        bool const removed = !changes.empty() && changes.back().action == "removed";
+        std::string const shown = removed ? name + std::string(kRemoved) : name;
+        std::cout << "  " << shown << std::string(width - shown.size() + 2, ' ') << originsOf(changes) << '\n';
+    }
+}
+
+// -I --origins: every form, with where its instruction came from; then the
+// instructions a later file or model removed.
+void printOrigins(const LoadedCpu& loaded) {
+    if (!loaded.models.empty()) {
+        std::string list;
+        for (const std::string& name : loaded.models) {
+            if (!list.empty()) {
+                list += ", ";
+            }
+            list += name;
+        }
+        std::cout << "model: " << (loaded.model.empty() ? "(the globals alone)" : loaded.model)
+                  << "; the file's models: " << list << '\n';
+    }
+    std::vector<std::pair<std::string, std::string>> rows; // the form, its history
+    size_t width = 0;
+    for (const std::string& mnemonic : loaded.cpu.isa().mnemonics()) {
+        auto const found = loaded.history.find(mnemonic);
+        std::string const history = found == loaded.history.end() ? std::string() : originsOf(found->second);
+        for (const std::string& form : loaded.cpu.isa().formsOf(mnemonic)) {
+            std::string row = mnemonic;
+            if (!form.empty()) {
+                row += ' ';
+                row += form;
+            }
+            rows.emplace_back(std::move(row), history);
+            width = std::max(width, rows.back().first.size());
+        }
+    }
+    for (const auto& [mnemonic, changes] : loaded.history) {
+        if (loaded.cpu.isa().formsOf(mnemonic).empty() && !changes.empty() && changes.back().action == "removed") {
+            rows.emplace_back(mnemonic + " (removed)", originsOf(changes));
+            width = std::max(width, rows.back().first.size());
+        }
+    }
+    for (const auto& [form, history] : rows) {
+        std::cout << form << std::string(width - form.size() + 2, ' ') << history << '\n';
+    }
+    printRegisterOrigins(loaded);
+}
+
 // -I/--isa: print the CPU config's ISA listing and exit, without needing a
-// source file.
-int runIsaMode(const std::string& cpuPath, Diagnostics& diagnostics) {
-    std::optional<LoadedCpu> loaded = loadCpuFile(cpuPath, diagnostics);
+// source file; with --origins, where each instruction came from.
+int runIsaMode(const Options& options, Diagnostics& diagnostics) {
+    std::optional<LoadedCpu> loaded = loadCpuFile(options.cpuPath, diagnostics);
     if (diagnostics.errorCount() > 0 || !loaded.has_value()) {
         diagnostics.printFailureSummary();
         return 1;
     }
-    printCpu(loaded->cpu, loaded->machine, true);
+    printCpu(loaded->cpu, loaded->machine, !options.origins);
+    if (options.origins) {
+        printOrigins(*loaded);
+    }
+    return 0;
+}
+
+// --dump-machine: the machine file as ptasm loaded and checked it.
+int runDumpMachine(const Options& options, Diagnostics& diagnostics) {
+    std::optional<LoadedCpu> loaded = loadCpuFile(options.cpuPath, diagnostics);
+    if (diagnostics.errorCount() > 0 || !loaded.has_value()) {
+        diagnostics.printFailureSummary();
+        return 1;
+    }
+    std::cout << loaded->json.dump(2) << '\n';
     return 0;
 }
 
@@ -90,15 +190,20 @@ std::string makeEscaped(const std::string& path) {
     return text;
 }
 
-// -MD: the output depends on the source and the machine file. False only
-// when the rule's file can't be opened.
-bool writeDependencies(const Options& options, Diagnostics& diagnostics) {
+// -MD: the output depends on the source and every machine file read (the
+// -m file and its includes). False only when the rule's file can't be
+// opened.
+bool writeDependencies(const Options& options, const std::vector<std::string>& machineFiles,
+                       Diagnostics& diagnostics) {
     if (!options.dependencyPath.has_value()) {
         return true;
     }
     return writeTo(*options.dependencyPath, std::ios::out, "dependency file", diagnostics, [&](std::ostream& stream) {
-        stream << makeEscaped(options.outputPath) << ": " << makeEscaped(options.sourcePath) << ' '
-               << makeEscaped(options.cpuPath) << '\n';
+        stream << makeEscaped(options.outputPath) << ": " << makeEscaped(options.sourcePath);
+        for (const std::string& file : machineFiles) {
+            stream << ' ' << makeEscaped(file);
+        }
+        stream << '\n';
     });
 }
 
@@ -135,7 +240,14 @@ void assemble(std::ifstream& stream, const Cpu& cpu, Bom& bom, const Options& op
         assembler.overrideOrigin(options.org.value());
     }
     for (const auto& [name, value] : options.defsyms) {
-        if (!assembler.defineSymbol(name, value)) {
+        bool const isRegister = std::ranges::any_of(bom.machine.registers, [&](const Register& entry) {
+            return std::ranges::equal(entry.name, name, [](char left, char right) {
+                return std::toupper(static_cast<unsigned char>(left)) == std::toupper(static_cast<unsigned char>(right));
+            });
+        });
+        if (isRegister) {
+            diagnostics.systemError("--defsym '" + name + "' is a register on this CPU; it can't be a constant");
+        } else if (!assembler.defineSymbol(name, value)) {
             diagnostics.systemError("--defsym '" + name + "' is given more than once");
         }
     }
@@ -155,7 +267,10 @@ int run(const Options& options, Diagnostics& diagnostics) {
         return 0;
     }
     if (options.isa) {
-        return runIsaMode(options.cpuPath, diagnostics);
+        return runIsaMode(options, diagnostics);
+    }
+    if (options.dumpMachine) {
+        return runDumpMachine(options, diagnostics);
     }
 
     std::error_code error;
@@ -197,7 +312,7 @@ int run(const Options& options, Diagnostics& diagnostics) {
     if (!writeListOutput(options.listPath, bom, diagnostics)) {
         return 1;
     }
-    if (!writeDependencies(options, diagnostics)) {
+    if (!writeDependencies(options, loaded->files, diagnostics)) {
         return 1;
     }
     diagnostics.flush(); // any warnings, before -v's summary
