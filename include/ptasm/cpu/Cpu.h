@@ -63,6 +63,16 @@ LoadedCpu loadCpu(const nlohmann::json& json, Diagnostics& diagnostics);
 std::optional<LoadedCpu> loadCpuFile(const std::string& path, Diagnostics& diagnostics,
                                      const std::optional<std::string>& model = std::nullopt);
 
+// Every form as ptasm expanded it (--dump-forms): its size, fields and
+// their placement, fixed values, operand parts, semantics and delay
+// slot; with the description, the register list and the abi block.
+// What the semantics tester decodes from.
+nlohmann::json formsJson(const LoadedCpu& loaded);
+
+// One form's worked-out facts, and the target of each pcrel field, as
+// --dump-forms and -I --semantics show them.
+nlohmann::json factsJson(const ptasm::Encoding& encoding);
+
 // The CPU's header always prints; the per-mnemonic form listing only
 // when listForms is true (--isa).
 void printCpu(const Cpu& cpu, const Machine& machine, bool listForms = false);

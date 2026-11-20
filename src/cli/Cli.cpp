@@ -47,7 +47,9 @@ struct RawOptions {
     std::string diagnosticsFormat = "text";
     bool isa = false;
     bool origins = false;
+    bool semantics = false;
     bool dumpMachine = false;
+    bool dumpForms = false;
     bool pad = false;
     bool debug = false;
     std::vector<std::string> defsyms;
@@ -193,11 +195,17 @@ void addOptions(CLI::App& app, RawOptions& raw, const CLI::Option*& listOption) 
     app.add_flag("-I,--isa", raw.isa,
                  "List every supported mnemonic/addressing-mode combination for -m's CPU config, then exit "
                  "(no source file needed)");
+    app.add_flag("--semantics", raw.semantics,
+                 "With -I: each form's semantics and what ptasm works out from them (registers read and written, "
+                 "operand roles, control flow, memory, side effects, commutes)");
     app.add_flag("--origins", raw.origins,
                  "With -I: each form with the machine file (and model) that defined it, and every file that "
                  "changed or removed it");
     app.add_flag("--dump-machine", raw.dumpMachine,
                  "Print -m's machine file as loaded (includes merged, its model applied) as JSON, then exit");
+    app.add_flag("--dump-forms", raw.dumpForms,
+                 "Print every instruction form of -m's machine file as ptasm expanded it (fields, fixed values, "
+                 "semantics), as JSON, then exit");
     app.add_option("--defsym", raw.defsyms,
                    "Define a constant, as .EQU does: NAME=value, value a decimal or 0x number (repeatable)")
         ->check([](const std::string& text) {
@@ -234,7 +242,9 @@ Options resolve(const RawOptions& raw, const CLI::Option& listOption) {
                     .diagnosticsFormat = diagnosticsFormatOf(raw.diagnosticsFormat),
                     .isa = raw.isa,
                     .origins = raw.origins,
+                    .semantics = raw.semantics,
                     .dumpMachine = raw.dumpMachine,
+                    .dumpForms = raw.dumpForms,
                     .pad = raw.pad,
                     .debug = raw.debug,
                     .listMachines = raw.listMachines};
@@ -292,11 +302,15 @@ std::variant<Options, int> Cli::parse(int argc, const char* const* argv) const {
         *err << "-g: only -f elf can hold debug information\n";
         return 1;
     }
+    if (raw.semantics && !raw.isa) {
+        *err << "--semantics: only with -I\n";
+        return 1;
+    }
     if (raw.origins && !raw.isa) {
         *err << "--origins: only with -I\n";
         return 1;
     }
-    if (raw.sourcePath.empty() && !raw.isa && !raw.listMachines && !raw.dumpMachine) {
+    if (raw.sourcePath.empty() && !raw.isa && !raw.listMachines && !raw.dumpMachine && !raw.dumpForms) {
         *err << app.help();
         return 1;
     }

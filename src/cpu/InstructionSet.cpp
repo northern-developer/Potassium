@@ -2,16 +2,21 @@
 #include "ptasm/cpu/Form.h"
 #include "ptasm/cpu/MachineGrammar.h"
 #include "ptasm/cpu/Problems.h"
+#include "ptasm/cpu/Semantics.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <optional>
+#include <regex>
 #include <bit>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -273,6 +278,7 @@ FieldDef readField(const std::string& name, const Json& json, Problems& problems
         field.build = Build::imm; // so a bad build isn't also reported as a "con" without a value
     }
     readPieces(json, field, context, problems);
+    field.targetWritten = json.contains("target");
     if (json.contains("target")) {
         if (json.at("target") == "data") {
             field.target = Target::data;
@@ -453,7 +459,26 @@ struct Pattern {
     std::map<std::string, std::string> formats;
 };
 
+// One level's "sem" and "semArgs": a mode set's, an instruction's or a
+// form's.
+// A JSON pointer ("/instructions/ADD/sem"), kept apart from message text.
+struct JsonPointer {
+    std::string text;
+};
+
+struct SemLevel {
+    std::string where; // the JSON pointer of its "sem", for reporting
+    std::optional<std::string> sem;
+    std::map<std::string, std::string> args;
+    std::optional<int> delaySlot;
+    // An instruction's written facts ("target", "commutes", "sideEffects"),
+    // plainly and in its "replace" (plan 0.2:E5.T1).
+    Json facts = Json::object();
+    Json replaced = Json::object();
+};
+
 struct Family {
+    SemLevel sem;
     std::map<std::string, std::string> formats;
     SetValues set;
     std::vector<std::map<std::string, std::string>> operands; // part -> field, per position
@@ -463,18 +488,29 @@ struct Family {
 // Reads and resolves everything a family refers to; one instance per load.
 class Loader {
 public:
+    explicit Loader(const SemanticsScope* names) : names(names) {}
     void run(const Json& json);
     void take(std::map<std::string, FieldDef>& fieldsOut,
-              std::map<std::string, std::map<std::string, Encoding>>& encodingsOut, Problems& problemsOut) {
+              std::map<std::string, std::map<std::string, Encoding>>& encodingsOut,
+              std::map<std::string, Pseudo>& pseudosOut, Problems& problemsOut) {
         fieldsOut = std::move(fields);
         encodingsOut = std::move(encodings);
+        pseudosOut = std::move(pseudos);
         problemsOut.append(problems);
     }
 
 private:
+    const SemanticsScope* names;
     std::map<std::string, FieldDef> fields;
     std::map<std::string, std::map<std::string, Encoding>> encodings;
     Problems problems;
+    std::map<std::string, std::string> semSets;
+    // "operandSemantics": a mode's address and value, as expressions in
+    // its parts (reg1, num1, ...), keyed by the mode with numbers as "imm".
+    std::map<std::string, std::pair<std::string, std::string>> modeMeanings;
+    std::map<std::string, Pseudo> pseudos;
+    std::map<std::string, std::string> pseudoPointers; // where each was written, for its problems
+    std::set<std::string> semanticsReported; // so a mode set's sem is reported once per instruction
     std::map<std::string, Format> formats;
     std::map<std::string, SetValues> modes;
     std::map<std::string, std::vector<std::string>> operandSets;
@@ -486,6 +522,30 @@ private:
     void readOperandSets(const Json& json);
     void readFamilies(const Json& json);
     void readInstructions(const Json& json);
+    void readSemSets(const Json& json);
+    void readOperandSemantics(const Json& json);
+    std::optional<std::vector<OperandMeaning>> meaningsOf(const Encoding& encoding,
+                                                          const std::vector<std::string>& modesOfForm,
+                                                          std::string& error) const;
+    std::optional<OperandMeaning> meaningOf(const std::string& key, const std::map<std::string, std::string>& parts,
+                                            std::string& error) const;
+    std::optional<std::vector<SemNode>> statementsOf(const struct ChosenSem& chosen, const Encoding& encoding,
+                                                     const std::vector<std::string>& modesOfForm,
+                                                     std::string& error) const;
+    void readBecomes(const std::string& mnemonic, const Json& value, const std::string& context);
+    std::optional<Pseudo::Alternative> readAlternative(const Json& value, const Pseudo& pseudo,
+                                                       const std::string& context);
+    void checkPseudos();
+    SemLevel readSemLevel(const Json& json, const std::string& context, JsonPointer where);
+    void readFacts(const Json& json, Json& into, const std::string& context);
+    void applyFacts(Encoding& encoding, const struct ChosenSem& chosen,
+                    const std::function<void(const std::string&)>& once);
+    static void applyFact(const ChosenSem& chosen, const std::string& key, const Json& derived,
+                          const std::function<void(const std::string&)>& once,
+                          const std::function<void(const Json&)>& apply);
+    void applySemantics(Encoding& encoding, const std::string& mnemonic,
+                        std::initializer_list<const SemLevel*> levels, // family, instruction, form
+                        const std::vector<std::string>& modesOfForm, const std::string& context);
 
     SetValues readSet(const Json& json, const std::string& context);
     // An operand pattern as the loader uses it: its standard spelling,
@@ -499,14 +559,15 @@ private:
     void readOperandRules(const Json& json, Family& family, const std::string& context);
     Family readFamily(const std::string& name, const Json& json);
     bool readPatternEntry(const std::string& text, const Json& value, const std::string& context, Pattern& pattern);
-    void readInstruction(const std::string& mnemonic, const Json& value);
+    void readInstruction(const std::string& mnemonic, const Json& value, const std::string& where);
 
     void expandFamily(const std::string& mnemonic, const Family& family, const SetValues& instructionSet,
-                      const std::set<std::string>& only, const std::set<std::string>& remove, bool hasOnly);
+                      const SemLevel& instructionSem, const std::set<std::string>& only,
+                      const std::set<std::string>& remove, bool hasOnly);
     Encoding buildEncoding(const std::vector<std::string>& modesOfForm, const Family& family, const Pattern& pattern,
                            const SetValues& instructionSet, const std::string& context);
     void readOverride(const std::string& mnemonic, const std::string& form, const Json& json,
-                      const SetValues& instructionSet);
+                      const SetValues& instructionSet, const SemLevel& instructionSem, const std::string& where);
     void reportUnmatched(const std::string& mnemonic, const std::set<std::string>& familyForms,
                          const std::set<std::string>& listed, const char* key);
     void validate(const Encoding& encoding, const std::vector<std::string>& modesOfForm, const std::string& context);
@@ -516,12 +577,15 @@ private:
 };
 
 void Loader::run(const Json& json) {
+    readSemSets(json);
+    readOperandSemantics(json);
     readFields(json);
     readFormats(json);
     readModes(json);
     readOperandSets(json);
     readFamilies(json);
     readInstructions(json);
+    checkPseudos();
 }
 
 void Loader::readFields(const Json& json) {
@@ -746,7 +810,7 @@ void Loader::readOperandRules(const Json& json, Family& family, const std::strin
 Family Loader::readFamily(const std::string& name, const Json& json) {
     std::string const context = "modeSet '" + name + "'";
     Family family;
-    std::set<std::string> allowed = {"formats", "set", "patterns"};
+    std::set<std::string> allowed = {"formats", "set", "patterns", "sem", "semArgs", "delaySlot"};
     for (char position = '1'; position <= '9'; ++position) {
         allowed.insert(std::string("op") + position);
     }
@@ -758,6 +822,7 @@ Family Loader::readFamily(const std::string& name, const Json& json) {
         family.set = readSet(json.at("set"), context);
     }
     readOperandRules(json, family, context);
+    family.sem = readSemLevel(json, context, {pointerTo("modeSets", name) + "/sem"});
     if (!json.contains("patterns") || !json.at("patterns").is_object()) {
         report(problems, {context, R"(: missing or non-object "patterns")"});
         return family;
@@ -948,7 +1013,8 @@ void Loader::validate(const Encoding& encoding, const std::vector<std::string>& 
 }
 
 void Loader::expandFamily(const std::string& mnemonic, const Family& family, const SetValues& instructionSet,
-                          const std::set<std::string>& only, const std::set<std::string>& remove, bool hasOnly) {
+                          const SemLevel& instructionSem, const std::set<std::string>& only,
+                          const std::set<std::string>& remove, bool hasOnly) {
     std::map<std::string, std::string> owner; // form -> the pattern that produced it
     std::set<std::string> familyForms;
     for (const Pattern& pattern : family.patterns) {
@@ -965,6 +1031,8 @@ void Loader::expandFamily(const std::string& mnemonic, const Family& family, con
             }
             Encoding encoding = buildEncoding(modesOfForm, family, pattern, instructionSet, context);
             validate(encoding, modesOfForm, context);
+            applySemantics(encoding, mnemonic, {&family.sem, &instructionSem}, modesOfForm,
+                           cat({"instruction '", mnemonic, "'"}));
             encodings[mnemonic][form] = std::move(encoding);
         }
     }
@@ -1012,9 +1080,10 @@ bool parseOperandPart(const std::string& text, OperandPart& out) {
 }
 
 void Loader::readOverride(const std::string& mnemonic, const std::string& form, const Json& json,
-                          const SetValues& instructionSet) {
+                          const SetValues& instructionSet, const SemLevel& instructionSem, const std::string& where) {
     std::string const context = "instruction '" + mnemonic + "' override '" + form + "'";
-    checkKeys(json, {"format", "size", "fields", "unused", "set", "from", "bytes"}, context, problems);
+    checkKeys(json, {"format", "size", "fields", "unused", "set", "from", "bytes", "sem", "semArgs"}, context,
+              problems);
     Encoding encoding;
     std::vector<std::string> const modesOfForm = splitOperands(form);
     if (!std::ranges::all_of(modesOfForm, isModeName)) {
@@ -1055,6 +1124,10 @@ void Loader::readOverride(const std::string& mnemonic, const std::string& form, 
         }
     }
     validate(encoding, modesOfForm, context);
+    SemLevel const formSem = readSemLevel(json, context, {where});
+    applySemantics(encoding, mnemonic, {nullptr, &instructionSem, &formSem}, modesOfForm,
+                   formSem.sem ? cat({"instruction '", mnemonic, "' form '", form, "'"})
+                               : cat({"instruction '", mnemonic, "'"}));
     encodings[mnemonic][form] = std::move(encoding);
 }
 
@@ -1071,14 +1144,28 @@ void Loader::readInstructions(const Json& json) {
     }
     for (const auto& [name, value] : json.at("instructions").items()) {
         ProblemsAt const scope(problems, pointerTo("instructions", name));
-        readInstruction(upper(name), value);
+        readInstruction(upper(name), value, pointerTo("instructions", name));
     }
 }
 
-void Loader::readInstruction(const std::string& mnemonic, const Json& value) {
+void Loader::readInstruction(const std::string& mnemonic, const Json& value, const std::string& where) {
     std::string const context = "instruction '" + mnemonic + "'";
-    checkKeys(value, {"modeSet", "set", "only", "remove", "forms"}, context, problems);
+    checkKeys(value,
+              {"modeSet", "set", "only", "remove", "forms", "sem", "semArgs", "delaySlot", "target", "commutes",
+               "sideEffects", "replace", "becomes", "operands"},
+              context, problems);
+    if (value.contains("becomes") || value.contains("operands")) {
+        if (value.contains("modeSet") || value.contains("forms") || value.contains("sem")) {
+            report(problems, {context, R"(: "becomes" is for a pseudo-instruction, with no encoding or "sem" of its )"
+                                       R"(own; the same meaning beside an encoding is for later (equivalent encodings))"});
+            return;
+        }
+        pseudoPointers[mnemonic] = where;
+        readBecomes(mnemonic, value, context);
+        return;
+    }
     SetValues const instructionSet = value.contains("set") ? readSet(value.at("set"), context) : SetValues{};
+    SemLevel const instructionSem = readSemLevel(value, context, {where + "/sem"});
     bool const hasOnly = value.contains("only");
     std::set<std::string> const only = hasOnly ? expandForms(value.at("only"), context) : std::set<std::string>{};
     std::set<std::string> const remove =
@@ -1088,7 +1175,7 @@ void Loader::readInstruction(const std::string& mnemonic, const Json& value) {
         if (!families.contains(family)) {
             report(problems, {context, ": unknown modeSet ", value.at("modeSet").dump()});
         } else {
-            expandFamily(mnemonic, families.at(family), instructionSet, only, remove, hasOnly);
+            expandFamily(mnemonic, families.at(family), instructionSet, instructionSem, only, remove, hasOnly);
         }
     }
     if (value.contains("forms")) {
@@ -1098,7 +1185,8 @@ void Loader::readInstruction(const std::string& mnemonic, const Json& value) {
                 continue;
             }
             for (const std::string& form : expandAlternatives(*tidied)) {
-                readOverride(mnemonic, form, override, instructionSet);
+                readOverride(mnemonic, form, override, instructionSet, instructionSem,
+                             (Json::json_pointer(where) / "forms" / key / "sem").to_string());
             }
         }
     }
@@ -1202,17 +1290,578 @@ std::vector<std::string> expandAlternatives(const std::string& text) {
     return results;
 }
 
-void InstructionSet::load(const nlohmann::json& json, Problems& problems) {
+// "becomes": one expansion, or alternatives {"when": "fits(imm, 12)",
+// "do": "..."} tried in order, the last one always; "operands" names
+// each operand, as the expansions use them.
+void Loader::readBecomes(const std::string& mnemonic, const Json& value, const std::string& context) {
+    if (!value.contains("becomes") || !value.contains("operands") || !value.at("operands").is_string()) {
+        report(problems, {context, R"(: a pseudo-instruction needs "operands" (a pattern naming each one, like )"
+                                   R"("rd:reg, rs:reg") and "becomes")"});
+        return;
+    }
+    Pseudo pseudo;
+    std::string error;
+    std::optional<PatternSyntax> pattern = parsePattern(value.at("operands").get<std::string>(), error);
+    if (!pattern) {
+        report(problems, {context, ": \"operands\" isn't an operand pattern (", error, ")"});
+        return;
+    }
+    for (PatternOperand& operand : *pattern) {
+        if (operand.name.empty()) {
+            report(problems, {context, R"(: each of "operands" needs a name, as "rd:reg", for "becomes" to use)"});
+            return;
+        }
+        pseudo.names.push_back(operand.name);
+        operand.name.clear();
+    }
+    std::string const plain = patternText(*pattern);
+    for (const std::string& form : expandAlternatives(plain)) {
+        if (std::optional<Form> const parsed = parseForm(form)) {
+            pseudo.forms.insert(*parsed);
+            pseudo.formTexts.push_back(form);
+        }
+    }
+    Json const alternatives = value.at("becomes").is_array() ? value.at("becomes") : Json::array({value.at("becomes")});
+    for (const Json& alternative : alternatives) {
+        if (std::optional<Pseudo::Alternative> read = readAlternative(alternative, pseudo, context)) {
+            pseudo.alternatives.push_back(std::move(*read));
+        }
+    }
+    if (pseudo.alternatives.empty() || !pseudo.alternatives.back().test.empty()) {
+        report(problems, {context, R"(: the last of "becomes" must have no "when": it is used when pass 1 can't )"
+                                   "tell the value yet"});
+    }
+    pseudos[mnemonic] = std::move(pseudo);
+}
+
+std::optional<Pseudo::Alternative> Loader::readAlternative(const Json& value, const Pseudo& pseudo,
+                                                           const std::string& context) {
+    Pseudo::Alternative alternative;
+    Json const text = value.is_object() ? value.value("do", Json()) : value;
+    if (!text.is_string() || (value.is_object() && !std::ranges::all_of(value.items(), [](const auto& item) {
+            return item.key() == "do" || item.key() == "when";
+        }))) {
+        report(problems, {context, R"(: each of "becomes" is assembly text, or {"when": ..., "do": ...})"});
+        return std::nullopt;
+    }
+    std::string error;
+    if (!checkMachineString(MachineLanguage::expansion, text.get<std::string>(), error)) {
+        report(problems, {context, ": \"becomes\" ", text.dump(), " isn't instructions separated by ';' (", error, ")"});
+        return std::nullopt;
+    }
+    std::stringstream lines(text.get<std::string>());
+    for (std::string line; std::getline(lines, line, ';');) {
+        if (std::string const trimmed = trim(line); !trimmed.empty()) {
+            alternative.lines.push_back(trimmed);
+        }
+    }
+    if (value.is_object() && value.contains("when")) {
+        std::string const when = value.at("when").is_string() ? value.at("when").get<std::string>() : "";
+        // fits(name, bits), fitsu(name, bits), or of a part: fitsu(%lo(name), 0).
+        static const std::regex kTest(
+            R"(^\s*(fits|fitsu)\s*\(\s*(?:(%?\w+)\s*\(\s*(\w+)\s*\)|(\w+))\s*,\s*(\d+)\s*\)\s*$)");
+        std::smatch match;
+        std::string const name = std::regex_match(when, match, kTest) ? match[3].str() + match[4].str() : "";
+        if (name.empty() || std::ranges::find(pseudo.names, name) == pseudo.names.end()) {
+            report(problems, {context, R"(: "when" is fits(name, bits) or fitsu(name, bits), name one of "operands" )"
+                                       "or an address part of one, %lo(name)"});
+            return std::nullopt;
+        }
+        alternative.test = match[1].str();
+        alternative.operand = static_cast<size_t>(std::ranges::find(pseudo.names, name) - pseudo.names.begin());
+        alternative.part = match[2].str();
+        constexpr size_t kBitsGroup = 5; // the regex's fifth group: the number of bits
+        alternative.bits = std::stoi(match[kBitsGroup].str());
+    }
+    return alternative;
+}
+
+// Each expansion's instructions are real ones: no pseudo-instruction
+// inside another, so there is no recursion. A "when" on a part needs an
+// expansion that uses that part, for its field.
+void Loader::checkPseudos() {
+    for (const auto& [mnemonic, pseudo] : pseudos) {
+        ProblemsAt const scope(problems, pseudoPointers[mnemonic]);
+        for (const Pseudo::Alternative& alternative : pseudo.alternatives) {
+            if (alternative.part.empty()) {
+                continue;
+            }
+            std::string const use = alternative.part + "(" + pseudo.names[alternative.operand] + ")";
+            bool const used = std::ranges::any_of(pseudo.alternatives, [&](const Pseudo::Alternative& other) {
+                return std::ranges::any_of(other.lines, [&](const std::string& line) {
+                    std::string compact;
+                    std::ranges::copy_if(line, std::back_inserter(compact), [](char letter) { return letter != ' '; });
+                    return compact.find(use) != std::string::npos;
+                });
+            });
+            if (!used) {
+                report(problems, {"instruction '", mnemonic, "': \"when\" tests ", use,
+                                  ", which none of its expansions uses, so its field is unknown"});
+            }
+        }
+        for (const Pseudo::Alternative& alternative : pseudo.alternatives) {
+            for (const std::string& line : alternative.lines) {
+                std::string const name = upper(line.substr(0, line.find_first_of(" \t")));
+                if (pseudos.contains(name)) {
+                    report(problems, {"instruction '", mnemonic, "': \"becomes\" uses '", name,
+                                      "', another pseudo-instruction; an expansion uses real instructions only"});
+                } else if (!encodings.contains(name)) {
+                    report(problems, {"instruction '", mnemonic, "': \"becomes\" uses '", name,
+                                      "', which isn't an instruction"});
+                }
+            }
+        }
+    }
+}
+
+namespace {
+
+// The standard spelling of a mode, numbers as "imm": "[reg + imm]".
+std::string modeKey(const std::string& mode) {
+    std::string error;
+    std::optional<PatternSyntax> pattern = parsePattern(mode, error);
+    if (!pattern || pattern->size() != 1) {
+        return mode;
+    }
+    for (PatternWord& word : pattern->front().words) {
+        for (std::string& name : word.names) {
+            if (isNumberWord(name)) {
+                name = "imm";
+            }
+        }
+        auto const repeated = std::ranges::unique(word.names);
+        word.names.erase(repeated.begin(), repeated.end());
+    }
+    return patternText(*pattern);
+}
+
+} // namespace
+
+void Loader::readOperandSemantics(const Json& json) {
+    if (!json.contains("operandSemantics")) {
+        return;
+    }
+    ProblemsAt const scope(problems, "/operandSemantics");
+    if (!json.at("operandSemantics").is_object()) {
+        problems.emplace_back(R"("operandSemantics" must be an object: each mode by its pattern)");
+        return;
+    }
+    for (const auto& [mode, value] : json.at("operandSemantics").items()) {
+        if (!value.is_object() || !std::ranges::all_of(value.items(), [](const auto& item) {
+                return (item.key() == "ea" || item.key() == "value") && item.value().is_string();
+            })) {
+            report(problems, {"operandSemantics '", mode, R"(': must be {"ea": ..., "value": ...}, each an expression )"
+                                                          "in the mode's parts (reg1, num1, ...)"});
+            continue;
+        }
+        modeMeanings[modeKey(mode)] = {value.value("ea", ""), value.value("value", "")};
+    }
+}
+
+namespace {
+
+// An expression in a mode's parts, its parts named by the form's fields.
+std::optional<SemNode> partExpression(const std::string& text, const std::map<std::string, std::string>& parts,
+                                      std::string& error) {
+    std::optional<std::vector<SemNode>> parsed = parseSemantics("x(" + text + ")", error);
+    if (!parsed || parsed->size() != 1 || parsed->front().args.size() != 1) {
+        if (error.empty()) {
+            error = "'" + text + "' isn't one expression";
+        }
+        return std::nullopt;
+    }
+    std::function<void(SemNode&)> rename = [&](SemNode& node) {
+        if (node.kind == SemNode::Kind::name) {
+            if (auto const found = parts.find(node.name); found != parts.end()) {
+                node.name = found->second;
+            }
+        }
+        for (SemNode& arg : node.args) {
+            rename(arg);
+        }
+    };
+    SemNode node = parsed->front().args[0];
+    rename(node);
+    return node;
+}
+
+SemNode call(const std::string& name, std::vector<SemNode> args) {
+    return SemNode{.kind = SemNode::Kind::call, .name = name, .args = std::move(args)};
+}
+
+} // namespace
+
+// Each operand's meaning in this form, from its mode: written in
+// "operandSemantics", or worked out for the plain modes (a register, a
+// number, and [reg], [imm], [reg + imm], [reg + reg]).
+std::optional<std::vector<OperandMeaning>> Loader::meaningsOf(const Encoding& encoding,
+                                                              const std::vector<std::string>& modesOfForm,
+                                                              std::string& error) const {
+    std::vector<OperandMeaning> meanings;
+    for (size_t position = 0; position < modesOfForm.size(); ++position) {
+        std::map<std::string, std::string> parts;
+        for (const auto& [field, part] : encoding.operandFields) {
+            if (std::cmp_equal(part.position, position)) {
+                parts[part.part] = field;
+            }
+        }
+        std::optional<OperandMeaning> meaning = meaningOf(modeKey(modesOfForm[position]), parts, error);
+        if (!meaning) {
+            return std::nullopt;
+        }
+        meanings.push_back(std::move(*meaning));
+    }
+    return meanings;
+}
+
+std::optional<OperandMeaning> Loader::meaningOf(const std::string& key, const std::map<std::string, std::string>& parts,
+                                                std::string& error) const {
+    static const std::map<std::string, std::pair<std::string, std::string>> kPlain = {
+        {"reg", {"", "reg1"}},   {"imm", {"", "num1"}},   {"[reg]", {"reg1", ""}},
+        {"[imm]", {"num1", ""}}, {"[reg + imm]", {"add(reg1, num1)", ""}}, {"[reg + reg]", {"add(reg1, reg2)", ""}}};
+    OperandMeaning meaning;
+    auto const written = modeMeanings.find(key);
+    auto const plain = kPlain.find(key);
+    if (written == modeMeanings.end() && plain == kPlain.end()) {
+        return meaning; // no meaning: an error only if $n or ea(n) uses it
+    }
+    auto const& [eaText, valueText] = written != modeMeanings.end() ? written->second : plain->second;
+    if (written == modeMeanings.end() && key == "reg" && parts.contains("reg1")) {
+        meaning.registerField = parts.at("reg1");
+    }
+    if (!eaText.empty()) {
+        meaning.address = partExpression(eaText, parts, error);
+        if (!meaning.address) {
+            return std::nullopt;
+        }
+    }
+    if (!valueText.empty()) {
+        meaning.value = partExpression(valueText, parts, error);
+        return meaning.value ? std::optional<OperandMeaning>(meaning) : std::nullopt;
+    }
+    if (meaning.address) {
+        int const width = names != nullptr ? names->regBits : 0;
+        if (width == 0) {
+            error = R"(an operand in memory is loaded at the registers' width: give "description.regBits")";
+            return std::nullopt;
+        }
+        meaning.value = call("load.u" + std::to_string(width), {*meaning.address});
+    }
+    return meaning;
+}
+
+void Loader::readSemSets(const Json& json) {
+    if (!json.contains("semSets")) {
+        return;
+    }
+    ProblemsAt const scope(problems, "/semSets");
+    if (!json.at("semSets").is_object()) {
+        problems.emplace_back(R"("semSets" must be an object: each shared semantics by its name)");
+        return;
+    }
+    for (const auto& [name, value] : json.at("semSets").items()) {
+        if (value.is_string()) {
+            semSets[name] = value.get<std::string>();
+        } else {
+            report(problems, {"semSets '", name, "': must be a semantics string"});
+        }
+    }
+}
+
+namespace {
+
+// The facts an instruction may write (plan 0.2:E5.T1): each key, what
+// a valid value is, and how to say so.
+struct FactKey {
+    const char* name;
+    bool (*valid)(const Json&);
+    const char* wanted;
+};
+
+const std::array<FactKey, 3>& factKeys() {
+    static const std::array<FactKey, 3> kKeys = {
+        FactKey{.name = "target",
+                .valid = [](const Json& value) { return value == "data" || value == "call" || value == "jump"; },
+                .wanted = R"("data", "call" or "jump")"},
+        FactKey{.name = "commutes",
+                .valid =
+                    [](const Json& value) {
+                        return value == false ||
+                               (value.is_array() && value.size() == 2 && value[0].is_string() && value[1].is_string());
+                    },
+                .wanted = "two register fields that may swap, or false"},
+        FactKey{.name = "sideEffects",
+                .valid = [](const Json& value) { return value.is_boolean(); },
+                .wanted = "true or false"}};
+    return kKeys;
+}
+
+} // namespace
+
+void Loader::readFacts(const Json& json, Json& into, const std::string& context) {
+    for (const FactKey& key : factKeys()) {
+        if (!json.contains(key.name)) {
+            continue;
+        }
+        if (key.valid(json.at(key.name))) {
+            into[key.name] = json.at(key.name);
+        } else {
+            report(problems, {context, ": \"", key.name, R"(" must be )", key.wanted});
+        }
+    }
+}
+
+SemLevel Loader::readSemLevel(const Json& json, const std::string& context, JsonPointer where) {
+    SemLevel level{.where = std::move(where.text)};
+    if (json.contains("sem")) {
+        if (json.at("sem").is_string()) {
+            level.sem = json.at("sem").get<std::string>();
+        } else {
+            report(problems, {context, R"(: "sem" must be a semantics string, or the name of a "semSets" entry)"});
+        }
+    }
+    readFacts(json, level.facts, context);
+    if (json.contains("replace") && json.at("replace").is_object()) {
+        readFacts(json.at("replace"), level.replaced, context);
+    }
+    if (json.contains("delaySlot")) {
+        constexpr int64_t kMostDelaySlots = 8;
+        if (json.at("delaySlot").is_number_integer() && json.at("delaySlot").get<int64_t>() >= 0 &&
+            json.at("delaySlot").get<int64_t>() <= kMostDelaySlots) {
+            level.delaySlot = json.at("delaySlot").get<int>();
+        } else {
+            report(problems, {context, R"(: "delaySlot" must be how many instructions run before the jump, 0 to 8)"});
+        }
+    }
+    if (json.contains("semArgs")) {
+        if (!json.at("semArgs").is_object()) {
+            report(problems, {context, R"(: "semArgs" must be an object: each {name} by its text)"});
+            return level;
+        }
+        for (const auto& [name, value] : json.at("semArgs").items()) {
+            if (value.is_string()) {
+                level.args[name] = value.get<std::string>();
+            } else {
+                report(problems, {context, ": semArgs "", name, "" must be a string"});
+            }
+        }
+    }
+    return level;
+}
+
+namespace {
+
+// The most specific level's "sem", and the "semArgs" of every level;
+// an argument at or below that level must fill a placeholder.
+struct ChosenSem {
+    int delaySlot{};
+    Json facts = Json::object();
+    Json replaced = Json::object();
+    const std::string* sem = nullptr;
+    const std::string* where = nullptr;
+    std::map<std::string, std::string> args;
+    std::set<std::string> mustUse;
+};
+
+// NOLINTBEGIN(misc-no-recursion): an if's statements nest.
+bool writesPc(std::vector<SemNode>::const_iterator first, std::vector<SemNode>::const_iterator last) {
+    return std::any_of(first, last, [](const SemNode& statement) {
+        if (statement.name == "if") {
+            return !statement.args.empty() && writesPc(statement.args.begin() + 1, statement.args.end());
+        }
+        return statement.name == "set" && !statement.args.empty() && statement.args[0].kind == SemNode::Kind::name &&
+               upper(statement.args[0].name) == "PC";
+    });
+}
+// NOLINTEND(misc-no-recursion)
+
+std::optional<Target> targetOf(const Json& facts) {
+    if (!facts.contains("target")) {
+        return std::nullopt;
+    }
+    if (facts.at("target") == "call") {
+        return Target::call;
+    }
+    return facts.at("target") == "jump" ? Target::jump : Target::data;
+}
+
+const char* targetName(Target target) {
+    switch (target) {
+        case Target::call:
+            return "call";
+        case Target::jump:
+            return "jump";
+        case Target::data:
+            return "data";
+    }
+    return "";
+}
+
+ChosenSem chooseSem(std::initializer_list<const SemLevel*> levels) {
+    ChosenSem chosen;
+    size_t semLevel = 0;
+    size_t index = 0;
+    for (const SemLevel* level : levels) {
+        if (level != nullptr) {
+            chosen.delaySlot = level->delaySlot.value_or(chosen.delaySlot);
+            chosen.facts.update(level->facts);
+            chosen.replaced.update(level->replaced);
+            if (level->sem) {
+                chosen.sem = &*level->sem;
+                chosen.where = &level->where;
+                semLevel = index;
+            }
+            for (const auto& [name, value] : level->args) {
+                chosen.args[name] = value;
+            }
+        }
+        ++index;
+    }
+    index = 0;
+    for (const SemLevel* level : levels) {
+        if (level != nullptr && index >= semLevel) {
+            for (const auto& [name, value] : level->args) {
+                chosen.mustUse.insert(name);
+            }
+        }
+        ++index;
+    }
+    return chosen;
+}
+
+} // namespace
+
+// The form's semantics: its "sem" (a string, or a "semSets" name), its
+// {placeholders} filled, then checked against the form's fields.
+void Loader::applySemantics(Encoding& encoding, const std::string& mnemonic,
+                            std::initializer_list<const SemLevel*> levels,
+                            const std::vector<std::string>& modesOfForm, const std::string& context) {
+    ChosenSem const chosen = chooseSem(levels);
+    encoding.delaySlot = chosen.delaySlot;
+    std::optional<Target> const written = targetOf(chosen.replaced.contains("target") ? chosen.replaced
+                                                                                       : chosen.facts);
+    for (const auto& [field, part] : encoding.operandFields) {
+        if (auto const found = fields.find(field); found != fields.end() && found->second.build == Build::pcrel) {
+            encoding.targets[field] = written.value_or(found->second.target);
+        }
+    }
+    if (names == nullptr) {
+        return;
+    }
+    auto const once = [&](const std::string& message) {
+        if (semanticsReported.insert(mnemonic + "\n" + message).second) {
+            report(problems, {context, " sem: ", message});
+        }
+    };
+    if (chosen.sem == nullptr) {
+        if (!chosen.args.empty()) {
+            once(R"("semArgs" without a "sem")");
+        }
+        return;
+    }
+    ProblemsAt const reportedAt(problems, *chosen.where);
+    std::string error;
+    std::optional<std::vector<SemNode>> const statements = statementsOf(chosen, encoding, modesOfForm, error);
+    if (!statements) {
+        once(error);
+        return;
+    }
+    SemanticsScope scope = *names;
+    for (const auto& [field, part] : encoding.operandFields) {
+        if (auto const found = fields.find(field); found != fields.end()) {
+            scope.fields[field] = found->second.build;
+        }
+    }
+    std::vector<std::string> found = checkSemantics(*statements, scope);
+    if (chosen.delaySlot > 0 && !writesPc(statements->begin(), statements->end())) {
+        found.emplace_back(R"(a "delaySlot" needs semantics that write PC)");
+    }
+    for (const std::string& message : found) {
+        once(message);
+    }
+    if (!found.empty()) {
+        return;
+    }
+    encoding.semantics = semanticsText(*statements);
+    encoding.facts = workOut(*statements, scope, names->link);
+    applyFacts(encoding, chosen, once);
+}
+
+// The form's statements: the sem (a semSets name, or its text) filled,
+// parsed, and its $n and ea(n) resolved in the form's operands.
+std::optional<std::vector<SemNode>> Loader::statementsOf(const ChosenSem& chosen, const Encoding& encoding,
+                                                        const std::vector<std::string>& modesOfForm,
+                                                        std::string& error) const {
+    auto const shared = semSets.find(*chosen.sem);
+    std::optional<std::string> const filled =
+        fillPlaceholders(shared != semSets.end() ? shared->second : *chosen.sem, chosen.args, chosen.mustUse, error);
+    if (!filled) {
+        return std::nullopt;
+    }
+    std::optional<std::vector<SemNode>> statements = parseSemantics(*filled, error);
+    if (statements && (filled->find('$') != std::string::npos || filled->find("ea(") != std::string::npos)) {
+        std::optional<std::vector<OperandMeaning>> const meanings = meaningsOf(encoding, modesOfForm, error);
+        statements = meanings ? resolveOperands(*statements, *meanings, names->regBits, error) : std::nullopt;
+    }
+    return statements;
+}
+
+// Each pcrel field's target from the semantics, and the written facts:
+// a plain one must agree with what is worked out; one in "replace"
+// wins.
+void Loader::applyFacts(Encoding& encoding, const ChosenSem& chosen,
+                        const std::function<void(const std::string&)>& once) {
+    for (auto& [field, target] : encoding.targets) {
+        auto const workedOut = encoding.facts.targets.find(field);
+        Target const derived = workedOut != encoding.facts.targets.end() ? workedOut->second : Target::data;
+        if (chosen.replaced.contains("target")) {
+            continue;
+        }
+        if (chosen.facts.contains("target") && chosen.facts.at("target") != targetName(derived)) {
+            once(cat({R"("target" is )", chosen.facts.at("target").dump(), ", but the semantics make it \"",
+                      targetName(derived), R"("; an override of a worked-out fact goes in "replace")"}));
+        } else if (!chosen.facts.contains("target") && fields.at(field).targetWritten &&
+                   fields.at(field).target != derived) {
+            once(cat({"field '", field, R"(' has "target": ")", targetName(fields.at(field).target),
+                      "\", but the semantics make it \"", targetName(derived),
+                      R"("; it is worked out, so leave it off the field)"}));
+        }
+        target = derived;
+    }
+    applyFact(chosen, "sideEffects", Json(encoding.facts.sideEffects), once, [&](const Json& value) {
+        encoding.facts.sideEffects = value.get<bool>();
+    });
+    Json const commutes = encoding.facts.commutes.empty() ? Json(false) : Json(encoding.facts.commutes);
+    applyFact(chosen, "commutes", commutes, once, [&](const Json& value) {
+        encoding.facts.commutes = value.is_array() ? value.get<std::vector<std::string>>() : std::vector<std::string>{};
+    });
+}
+
+// One written fact: in "replace", it is `apply`ed; plainly, it must equal
+// the worked-out value.
+void Loader::applyFact(const ChosenSem& chosen, const std::string& key, const Json& derived,
+                       const std::function<void(const std::string&)>& once,
+                       const std::function<void(const Json&)>& apply) {
+    if (chosen.replaced.contains(key)) {
+        apply(chosen.replaced.at(key));
+    } else if (chosen.facts.contains(key) && chosen.facts.at(key) != derived) {
+        once(cat({"\"", key, "\" is ", chosen.facts.at(key).dump(), ", but the semantics make it ", derived.dump(),
+                  R"(; an override of a worked-out fact goes in "replace")"}));
+    }
+}
+
+void InstructionSet::load(const nlohmann::json& json, Problems& problems, const SemanticsScope* names) {
     fields.clear();
     encodings.clear();
+    pseudoMap.clear();
     if (!json.is_object()) {
         problems.emplace_back("the top level must be an object");
         return;
     }
-    Loader loader;
+    Loader loader(names);
     loader.run(json);
     std::map<std::string, std::map<std::string, Encoding>> byText;
-    loader.take(fields, byText, problems);
+    loader.take(fields, byText, pseudoMap, problems);
     // The loader checks forms as text; lookups use their values. A form the
     // loader accepted always parses.
     for (auto& [mnemonic, forms] : byText) {
@@ -1237,6 +1886,11 @@ const Encoding* InstructionSet::find(const std::string& mnemonic, const Form& fo
 const Encoding* InstructionSet::find(const std::string& mnemonic, std::string_view form) const {
     std::optional<Form> const parsed = parseForm(form);
     return parsed ? find(mnemonic, *parsed) : nullptr;
+}
+
+const Pseudo* InstructionSet::pseudo(const std::string& mnemonic) const {
+    auto const found = pseudoMap.find(mnemonic);
+    return found == pseudoMap.end() ? nullptr : &found->second;
 }
 
 std::vector<std::string> InstructionSet::mnemonics() const {

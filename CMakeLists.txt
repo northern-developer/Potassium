@@ -7,7 +7,7 @@ include(${cpp-library_SOURCE_DIR}/cpp-library.cmake)
 
 cpp_library_enable_dependency_tracking()
 # The release version, set here; ptasm --version reports it.
-set(PTASM_VERSION 0.2.1)
+set(PTASM_VERSION 0.2.2)
 project(ptasm-core VERSION ${PTASM_VERSION} LANGUAGES CXX)
 # cpp-library otherwise takes its version from the latest git tag.
 set(CPP_LIBRARY_VERSION ${PTASM_VERSION})
@@ -41,7 +41,7 @@ cpp_library_setup(
     SOURCES assembler/Assembler.cpp assembler/Encoder.cpp assembler/SymbolTable.cpp assembler/Layout.cpp assembler/OperandClassifier.cpp assembler/AsmParser.cpp writers/BinWriter.cpp writers/IntelHexWriter.cpp writers/SRecordWriter.cpp writers/RecordWriter.cpp writers/ListingWriter.cpp
             writers/ElfWriter.cpp writers/DwarfWriter.cpp cli/Formats.cpp cli/Cli.cpp writers/ObjectWriter.cpp
     TESTS test_examples.cpp test_source.cpp test_encoding.cpp test_elf.cpp test_errors.cpp
-          test_instruction_set.cpp test_cli.cpp test_diagnostics.cpp test_machine_file.cpp
+          test_instruction_set.cpp test_cli.cpp test_diagnostics.cpp test_machine_file.cpp test_semantics.cpp
     REQUIRES_CPP_VERSION 20
 )
 
@@ -59,7 +59,8 @@ CPMAddPackage(
 # libptasm: what reads and checks the machine file, shared by ptasm and,
 # later, ptsim and ptllvm (plan 0.2:E5.A3). Linked statically.
 add_library(ptasm-lib STATIC src/cpu/Cpu.cpp src/cpu/Form.cpp src/cpu/InstructionSet.cpp src/cpu/MachineFile.cpp
-                             src/cpu/MachineGrammar.cpp src/assembler/Diagnostics.cpp)
+                             src/cpu/MachineGrammar.cpp src/cpu/Semantics.cpp src/cpu/Abi.cpp src/cpu/FormsJson.cpp
+                             src/assembler/Diagnostics.cpp)
 add_library(ptasm::lib ALIAS ptasm-lib)
 set_target_properties(ptasm-lib PROPERTIES OUTPUT_NAME ptasm)
 target_compile_features(ptasm-lib PUBLIC cxx_std_20)
@@ -117,6 +118,7 @@ find_program(PTASM_RISCV_LD NAMES riscv64-unknown-elf-ld riscv32-unknown-elf-ld)
 # 0.2:E11.T1's debugging tests: QEMU's system emulator (from PTASM_QEMU_DIR
 # or PATH), Renode (its launcher, given as PTASM_RENODE) and LLDB.
 find_program(PTASM_QEMU_SYSTEM_RISCV32 NAMES qemu-system-riscv32 HINTS ${PTASM_QEMU_DIR})
+find_program(PTASM_QEMU_SYSTEM_OR1K NAMES qemu-system-or1k HINTS ${PTASM_QEMU_DIR})
 find_program(PTASM_RENODE NAMES renode)
 find_program(PTASM_LLDB NAMES lldb)
 find_program(PTASM_RISCV_AS NAMES riscv64-unknown-elf-as riscv32-unknown-elf-as)
@@ -254,6 +256,62 @@ if(BUILD_TESTING)
                          -DOBJCOPY=${PTASM_OR1K_OBJCOPY}
                          -DWORK=${CMAKE_CURRENT_BINARY_DIR}/isa-or1k
                          -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/isa_reference.cmake)
+    endif()
+
+    # The semantics tester (0.2:E5.T1): programs run from each machine
+    # file's micro-ops, and programs that must fail.
+    if(Python3_FOUND)
+        foreach(cpu IN ITEMS rv32i or1k testcpu-0)
+            string(TOUPPER ${cpu} machine)
+            add_test(NAME semantics-${cpu}
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/ptsem.py
+                             $<TARGET_FILE:ptasm> ${CMAKE_CURRENT_SOURCE_DIR}/machines/${machine}.json
+                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/${cpu})
+            add_test(NAME semantics-${cpu}-fail
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/ptsem.py
+                             $<TARGET_FILE:ptasm> ${CMAKE_CURRENT_SOURCE_DIR}/machines/${machine}.json
+                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/${cpu}-fail --steps 1000 --fail)
+            set_tests_properties(semantics-${cpu} semantics-${cpu}-fail PROPERTIES LABELS semantics)
+            # The same programs under QEMU's system emulator: its state
+            # at the end must equal the tester's.
+            set(qemu "")
+            if(cpu STREQUAL "rv32i")
+                set(qemu ${PTASM_QEMU_SYSTEM_RISCV32})
+            elseif(cpu STREQUAL "or1k")
+                set(qemu ${PTASM_QEMU_SYSTEM_OR1K})
+            endif()
+            if(qemu)
+                add_test(NAME semantics-qemu-${cpu}
+                         COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/qemu_check.py
+                                 $<TARGET_FILE:ptasm> ${CMAKE_CURRENT_SOURCE_DIR}/machines/${machine}.json
+                                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/semantics/${cpu} ${qemu} ${cpu})
+                set_tests_properties(semantics-qemu-${cpu} PROPERTIES LABELS "semantics;qemu" TIMEOUT 300)
+            endif()
+        endforeach()
+    endif()
+
+    # ptasm's cost grows linearly with the source: 4N blocks of code cost
+    # about 4 times N blocks, by callgrind's instruction count.
+    if(PTASM_RELEASE_TESTS AND Python3_FOUND AND PTASM_VALGRIND AND NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
+        add_test(NAME perf-scaling-rv32i
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/perf/scaling.py
+                         $<TARGET_FILE:ptasm> ${PTASM_VALGRIND} ${CMAKE_CURRENT_SOURCE_DIR}/machines/RV32I.json)
+        set_tests_properties(perf-scaling-rv32i PROPERTIES LABELS "release;perf" TIMEOUT 1800)
+    endif()
+
+    # The machine files' "abi" blocks against each CPU's GCC (0.2:E5.T1).
+    if(Python3_FOUND AND PTASM_RISCV_GCC AND PTASM_RISCV_OBJDUMP)
+        add_test(NAME abi-rv32i
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/abi/check-abi.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/machines/RV32I.json ${PTASM_RISCV_GCC} ${PTASM_RISCV_OBJDUMP}
+                         -march=rv32i -mabi=ilp32)
+        set_tests_properties(abi-rv32i PROPERTIES LABELS abi)
+    endif()
+    if(Python3_FOUND AND PTASM_OR1K_GCC AND PTASM_OR1K_OBJDUMP)
+        add_test(NAME abi-or1k
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/abi/check-abi.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/machines/OR1K.json ${PTASM_OR1K_GCC} ${PTASM_OR1K_OBJDUMP})
+        set_tests_properties(abi-or1k PROPERTIES LABELS abi)
     endif()
 
     # Randomized encoder tests (0.2:E9.T2): every form of RV32I and OR1K,
@@ -645,5 +703,5 @@ add_custom_target(run-my-source
 # apply to every target in the whole build tree, which is exactly that
 # mistake; setting the property only on these targets avoids it.
 if(DEFINED PTASM_CLANG_TIDY)
-    set_target_properties(ptasm-lib ptasm-core ptasm test_examples test_source test_encoding test_elf test_errors test_machine_file PROPERTIES CXX_CLANG_TIDY "${PTASM_CLANG_TIDY}")
+    set_target_properties(ptasm-lib ptasm-core ptasm test_examples test_source test_encoding test_elf test_errors test_machine_file test_semantics PROPERTIES CXX_CLANG_TIDY "${PTASM_CLANG_TIDY}")
 endif()

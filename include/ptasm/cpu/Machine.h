@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 // What a machine file says the CPU is, apart from how its instructions are
 // encoded: "cpuName", the "description" block and the optional "elf"
 // block, each a struct of the same name. Validated once by loadCpu
@@ -62,6 +64,17 @@ struct Register {
 	int lsb{};
 	Writes writes = Writes::none;
 	std::string alias;         // another name for this register; its other values are copied from it
+	std::map<std::string, int> flags; // a flags register's flags, each by its bit (plan 0.2:E5.T1)
+};
+
+// A helper the semantics call (plan 0.2:E5.T1): an operation the
+// vocabulary can't express, written by hand in each writer, declared
+// with what it reads and writes so the instructions calling it stay
+// decidable.
+struct Helper {
+	std::vector<std::string> uses; // fields, registers or flags it reads
+	std::vector<std::string> defs; // and writes
+	bool sideEffects = false;
 };
 
 struct Machine {
@@ -69,6 +82,9 @@ struct Machine {
 	Description description;
 	std::optional<Elf> elf;
 	std::vector<Register> registers; // in name order; empty when the file has no list
+	std::map<std::string, Helper> helpers;
+	// The "abi" block, checked (plan 0.2:E5.T1); null when the file has none.
+	nlohmann::json abi;
 };
 
 // The name every display shows, with the ELF machine number, so an

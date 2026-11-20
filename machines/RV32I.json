@@ -16,6 +16,30 @@
       "addr32": 1
     }
   },
+  "registers": {
+    "x0": { "number": 0, "const": 0 }
+  },
+  "abi": {
+    "stack": { "register": "R2", "grows": "down", "align": 16, "redZone": 0 },
+    "link": "R1",
+    "frame": { "register": "R8", "order": ["lr", "fp", "calleeSaved", "locals", "outgoing"],
+               "calleeSaved": "descending", "points": "cfa" },
+    "globalPointer": { "register": "R3", "symbol": "__global_pointer$" },
+    "threadPointer": "R4",
+    "args": { "registers": ["R10", "R11", "R12", "R13", "R14", "R15", "R16", "R17"],
+              "pair": "consecutive", "variadicPair": "even", "splitPair": true, "variadic": "registers",
+              "aggregates": "reference", "aggregateValueMax": 8 },
+    "returns": { "registers": ["R10", "R11"], "sret": { "pointer": "R10", "above": 8 } },
+    "calleeSaved": ["R2", "R8", "R9", "R18", "R19", "R20", "R21", "R22", "R23", "R24", "R25", "R26", "R27"],
+    "eh": { "dataRegs": ["R10", "R11", "R12", "R13"] },
+    "vaList": "pointer",
+    "types": {
+      "char": { "size": 1, "signed": false }, "short": { "size": 2 }, "int": { "size": 4 }, "long": { "size": 4 },
+      "longLong": { "size": 8 }, "pointer": { "size": 4 }, "float": { "size": 4 }, "double": { "size": 8 },
+      "longDouble": { "size": 16 }, "sizeT": "unsigned int", "wcharT": "int"
+    },
+    "breakpoint": "EBREAK"
+  },
   "fields": {
     "opcode": {
       "build": "set",
@@ -78,7 +102,6 @@
     },
     "b_off": {
       "build": "pcrel",
-      "target": "jump",
       "relocation": 16,
       "pieces": [
         {
@@ -118,7 +141,6 @@
     },
     "j_off": {
       "build": "pcrel",
-      "target": "jump",
       "relocation": 17,
       "pieces": [
         {
@@ -269,6 +291,7 @@
   },
   "modeSets": {
     "r": {
+      "sem": "set(rd, {op}(rs1, rs2))",
       "formats": {
         "default": "R"
       },
@@ -286,6 +309,7 @@
       }
     },
     "i": {
+      "sem": "set(rd, {op}(rs1, i_imm))",
       "formats": {
         "default": "I"
       },
@@ -304,6 +328,7 @@
       }
     },
     "shift": {
+      "sem": "set(rd, {op}(rs1, shamt))",
       "formats": {
         "default": "Ishift"
       },
@@ -353,6 +378,7 @@
       }
     },
     "branch": {
+      "sem": "if(setcc(rs1, rs2, {cc}), set(PC, b_off))",
       "formats": {
         "default": "B"
       },
@@ -372,6 +398,7 @@
   },
   "instructions": {
     "ADD": {
+      "semArgs": { "op": "add" },
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -380,6 +407,7 @@
       }
     },
     "SUB": {
+      "semArgs": { "op": "sub" },
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -388,6 +416,7 @@
       }
     },
     "SLL": {
+      "sem": "set(rd, shl(rs1, and(rs2, 31)))",
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -396,6 +425,7 @@
       }
     },
     "SLT": {
+      "sem": "set(rd, setcc(rs1, rs2, lt))",
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -404,6 +434,7 @@
       }
     },
     "SLTU": {
+      "sem": "set(rd, setcc(rs1, rs2, ult))",
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -412,6 +443,7 @@
       }
     },
     "XOR": {
+      "semArgs": { "op": "xor" },
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -420,6 +452,7 @@
       }
     },
     "SRL": {
+      "sem": "set(rd, srl(rs1, and(rs2, 31)))",
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -428,6 +461,7 @@
       }
     },
     "SRA": {
+      "sem": "set(rd, sra(rs1, and(rs2, 31)))",
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -436,6 +470,7 @@
       }
     },
     "OR": {
+      "semArgs": { "op": "or" },
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -444,6 +479,7 @@
       }
     },
     "AND": {
+      "semArgs": { "op": "and" },
       "modeSet": "r",
       "set": {
         "opcode": "0x33",
@@ -452,6 +488,7 @@
       }
     },
     "ADDI": {
+      "semArgs": { "op": "add" },
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -459,6 +496,7 @@
       }
     },
     "SLTI": {
+      "sem": "set(rd, setcc(rs1, i_imm, lt))",
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -466,6 +504,7 @@
       }
     },
     "SLTIU": {
+      "sem": "set(rd, setcc(rs1, i_imm, ult))",
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -473,6 +512,7 @@
       }
     },
     "XORI": {
+      "semArgs": { "op": "xor" },
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -480,6 +520,7 @@
       }
     },
     "ORI": {
+      "semArgs": { "op": "or" },
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -487,6 +528,7 @@
       }
     },
     "ANDI": {
+      "semArgs": { "op": "and" },
       "modeSet": "i",
       "set": {
         "opcode": "0x13",
@@ -494,6 +536,7 @@
       }
     },
     "SLLI": {
+      "semArgs": { "op": "shl" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x13",
@@ -502,6 +545,7 @@
       }
     },
     "SRLI": {
+      "semArgs": { "op": "srl" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x13",
@@ -510,6 +554,7 @@
       }
     },
     "SRAI": {
+      "semArgs": { "op": "sra" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x13",
@@ -518,6 +563,7 @@
       }
     },
     "LB": {
+      "sem": "set(rd, load.s8(add(rs1, i_imm)))",
       "modeSet": "load",
       "set": {
         "opcode": "0x03",
@@ -525,6 +571,7 @@
       }
     },
     "LH": {
+      "sem": "set(rd, load.s16(add(rs1, i_imm)))",
       "modeSet": "load",
       "set": {
         "opcode": "0x03",
@@ -532,6 +579,7 @@
       }
     },
     "LW": {
+      "sem": "set(rd, load.s32(add(rs1, i_imm)))",
       "modeSet": "load",
       "set": {
         "opcode": "0x03",
@@ -539,6 +587,7 @@
       }
     },
     "LBU": {
+      "sem": "set(rd, load.u8(add(rs1, i_imm)))",
       "modeSet": "load",
       "set": {
         "opcode": "0x03",
@@ -546,6 +595,7 @@
       }
     },
     "LHU": {
+      "sem": "set(rd, load.u16(add(rs1, i_imm)))",
       "modeSet": "load",
       "set": {
         "opcode": "0x03",
@@ -553,6 +603,7 @@
       }
     },
     "SB": {
+      "sem": "store.8(add(rs1, s_imm), rs2)",
       "modeSet": "store",
       "set": {
         "opcode": "0x23",
@@ -560,6 +611,7 @@
       }
     },
     "SH": {
+      "sem": "store.16(add(rs1, s_imm), rs2)",
       "modeSet": "store",
       "set": {
         "opcode": "0x23",
@@ -567,6 +619,7 @@
       }
     },
     "SW": {
+      "sem": "store.32(add(rs1, s_imm), rs2)",
       "modeSet": "store",
       "set": {
         "opcode": "0x23",
@@ -574,6 +627,7 @@
       }
     },
     "BEQ": {
+      "semArgs": { "cc": "eq" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -581,6 +635,7 @@
       }
     },
     "BNE": {
+      "semArgs": { "cc": "ne" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -588,6 +643,7 @@
       }
     },
     "BLT": {
+      "semArgs": { "cc": "lt" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -595,6 +651,7 @@
       }
     },
     "BGE": {
+      "semArgs": { "cc": "ge" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -602,6 +659,7 @@
       }
     },
     "BLTU": {
+      "semArgs": { "cc": "ult" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -609,6 +667,7 @@
       }
     },
     "BGEU": {
+      "semArgs": { "cc": "uge" },
       "modeSet": "branch",
       "set": {
         "opcode": "0x63",
@@ -618,6 +677,7 @@
     "LUI": {
       "forms": {
         "reg, imm": {
+          "sem": "set(rd, shl(u_imm, 12))",
           "format": "U",
           "set": {
             "opcode": "0x37"
@@ -628,6 +688,7 @@
           }
         },
         "reg, %hi(imm|local|reloc)": {
+          "sem": "set(rd, u_hi)",
           "format": "Uhi",
           "set": {
             "opcode": "0x37"
@@ -640,6 +701,7 @@
       }
     },
     "AUIPC": {
+      "sem": "set(rd, add(PC, shl(u_imm, 12)))",
       "forms": {
         "reg, imm": {
           "format": "U",
@@ -654,6 +716,7 @@
       }
     },
     "JAL": {
+      "sem": "set(rd, pc.next); set(PC, j_off)",
       "forms": {
         "reg, imm|local|reloc": {
           "format": "J",
@@ -668,6 +731,7 @@
       }
     },
     "JALR": {
+      "sem": "set(rd, pc.next); set(PC, and(add(rs1, i_imm), -2))",
       "modeSet": "i",
       "set": {
         "opcode": "0x67",
@@ -689,6 +753,7 @@
       }
     },
     "FENCE": {
+      "sem": "fence()",
       "forms": {
         "": {
           "bytes": "0x0F 0x00 0xF0 0x0F"
@@ -717,6 +782,7 @@
       }
     },
     "ECALL": {
+      "sem": "trap(syscall)",
       "forms": {
         "": {
           "bytes": "0x73 0x00 0x00 0x00"
@@ -724,6 +790,7 @@
       }
     },
     "EBREAK": {
+      "sem": "trap(breakpoint)",
       "forms": {
         "": {
           "bytes": "0x73 0x00 0x10 0x00"
@@ -731,101 +798,32 @@
       }
     },
     "NOP": {
-      "forms": {
-        "": {
-          "bytes": "0x13 0x00 0x00 0x00"
-        }
-      }
+      "operands": "",
+      "becomes": "ADDI R0, R0, 0"
     },
     "RET": {
-      "forms": {
-        "": {
-          "bytes": "0x67 0x80 0x00 0x00"
-        }
-      }
+      "operands": "",
+      "becomes": "JALR R0, R1, 0"
     },
     "MV": {
-      "forms": {
-        "reg, reg": {
-          "size": 4,
-          "fields": [
-            "i_zero",
-            "rs1",
-            "funct3",
-            "rd",
-            "opcode"
-          ],
-          "set": {
-            "opcode": "0x13",
-            "funct3": 0
-          },
-          "from": {
-            "rd": "op1.reg1",
-            "rs1": "op2.reg1"
-          }
-        }
-      }
+      "operands": "rd:reg, rs:reg",
+      "becomes": "ADDI rd, rs, 0"
     },
     "LI": {
-      "forms": {
-        "reg, imm": {
-          "size": 4,
-          "fields": [
-            "i_imm",
-            "rs1_zero",
-            "funct3",
-            "rd",
-            "opcode"
-          ],
-          "set": {
-            "opcode": "0x13",
-            "funct3": 0
-          },
-          "from": {
-            "rd": "op1.reg1",
-            "i_imm": "op2.num1"
-          }
-        }
-      }
+      "operands": "rd:reg, value:imm",
+      "becomes": [
+        { "when": "fits(value, 12)", "do": "ADDI rd, R0, value" },
+        { "when": "fitsu(%lo(value), 0)", "do": "LUI rd, %hi(value)" },
+        { "do": "LUI rd, %hi(value); ADDI rd, rd, %lo(value)" }
+      ]
     },
     "J": {
-      "forms": {
-        "imm|local|reloc": {
-          "size": 4,
-          "fields": [
-            "j_off",
-            "rd_zero",
-            "opcode"
-          ],
-          "set": {
-            "opcode": "0x6f"
-          },
-          "from": {
-            "j_off": "op1.num1"
-          }
-        }
-      }
+      "operands": "target:imm|local|reloc",
+      "becomes": "JAL R0, target"
     },
     "JR": {
-      "forms": {
-        "reg": {
-          "size": 4,
-          "fields": [
-            "i_zero",
-            "rs1",
-            "funct3",
-            "rd_zero",
-            "opcode"
-          ],
-          "set": {
-            "opcode": "0x67",
-            "funct3": 0
-          },
-          "from": {
-            "rs1": "op1.reg1"
-          }
-        }
-      }
+      "operands": "rs:reg",
+      "becomes": "JALR R0, rs, 0"
     }
   }
 }

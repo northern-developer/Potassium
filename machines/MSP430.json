@@ -9,6 +9,10 @@
     "byteOrder": "little",
     "relOffset": "after"
   },
+  "registers": {
+    "SP": { "number": 1, "role": "sp" },
+    "SR": { "number": 2, "role": "flags", "flags": { "C": 0, "Z": 1, "N": 2, "V": 8 } }
+  },
   "elf": {
     "eMachine": 105,
     "elfClass": 32,

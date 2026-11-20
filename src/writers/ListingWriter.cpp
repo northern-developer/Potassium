@@ -193,6 +193,9 @@ std::pair<const Statement*, size_t> Writer::assembledAt(size_t number) {
     size_t shownBlock = currentSection;
     if (linesAt.contains(number)) {
         for (const auto& [block, line] : linesAt[number]) {
+            if (line->expansion && line->expansion->part > 1) {
+                continue; // a pseudo-instruction's later parts list on rows of their own
+            }
             if (shown == nullptr || !line->bytes.empty() || instructionOf(*line) != nullptr) {
                 shown = line;
                 shownBlock = block;
@@ -254,6 +257,13 @@ void Writer::writeSourceLine(size_t number, const std::string& source) {
              .bytes = wordText(shown->bytes, from)});
     }
     nextFree[shownBlock] = shown->address + static_cast<int64_t>(size);
+    for (const auto& [block, line] : linesAt[number]) {
+        if (line->expansion && line->expansion->part > 1) {
+            row({.address = hex(static_cast<uint64_t>(line->address), addressDigits),
+                 .bytes = byteText(line->bytes, 0, line->bytes.size())});
+            nextFree[block] = line->address + static_cast<int64_t>(line->bytes.size());
+        }
+    }
     blockShown = true;
 }
 

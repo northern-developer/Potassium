@@ -1,4 +1,6 @@
 #include "ptasm/assembler/Assembler.h"
+#include "ptasm/cpu/Form.h"
+#include "ptasm/cpu/InstructionSet.h"
 #include "ptasm/assembler/AsmParser.h"
 #include "ptasm/assembler/Bom.h"
 #include "ptasm/assembler/SourceStatement.h"
@@ -13,11 +15,15 @@
 #include "ptasm/cpu/Machine.h"
 
 #include <bitset>
+#include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <iterator>
 #include <iostream>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -134,7 +140,7 @@ void dumpOperand(const Operand& arg) {
 
 } // namespace
 
-std::vector<SourceStatement> Assembler::parse(const std::string& sourceText) const {
+std::vector<SourceStatement> Assembler::parse(const std::string& sourceText, std::optional<Syntax> forced) const {
     if (std::optional<Utf8Problem> const problem = firstUtf8Problem(sourceText)) {
         std::ostringstream message;
         message << "byte 0x" << std::hex << std::uppercase << static_cast<unsigned>(problem->byte)
@@ -162,7 +168,7 @@ std::vector<SourceStatement> Assembler::parse(const std::string& sourceText) con
                                        .addressSlotBytes = addressSlotBytes(),
                                        .verbose = verbose,
                                        .registers = &bom->machine.registers});
-    if (syntax == Syntax::att) {
+    if (forced.value_or(syntax) == Syntax::att) {
         asmParser.visitAttProg(parser.attProg());
     } else {
         asmParser.visitIntelProg(parser.intelProg());
@@ -334,7 +340,281 @@ void Assembler::run(const directive::Label& label) {
     addListingNote({.lineNumber = label.line, .kind = ListingNote::Kind::label, .name = label.name});
 }
 
+std::optional<int64_t> Assembler::knownValue(const Operand& operand) const {
+    if (!operand.part.empty() || operand.type != ArgType::immediate) {
+        return std::nullopt;
+    }
+    if (operand.terms.empty()) {
+        return operand.value;
+    }
+    int64_t sum = 0;
+    for (const Term& term : operand.terms) {
+        int64_t value = term.value;
+        if (!term.label.empty()) {
+            std::optional<int64_t> const constant =
+                symbols.isConstant(term.label) ? symbols.value(term.label) : std::nullopt;
+            if (!constant) {
+                return std::nullopt;
+            }
+            value = *constant;
+        }
+        sum += term.negated ? -value : value;
+    }
+    return sum;
+}
+
+namespace {
+
+constexpr int kWidestTest = 64;
+
+bool passes(const ptasm::Pseudo::Alternative& alternative, int64_t value) {
+    if (alternative.bits == 0) {
+        return value == 0; // 0 fits in 0 bits, and nothing else does
+    }
+    if (alternative.bits >= kWidestTest) {
+        return true;
+    }
+    int64_t const span = int64_t{1} << static_cast<unsigned>(alternative.bits);
+    if (alternative.test == "fitsu") {
+        return value >= 0 && value < span;
+    }
+    return value >= -(span / 2) && value < span / 2;
+}
+
+// What a field keeps of a part's value, as a number.
+int64_t keptBits(const ptasm::FieldDef& field, int64_t value) {
+    int lowest = kWidestTest;
+    int top = 0;
+    for (const ptasm::FieldPiece& piece : field.pieces) {
+        lowest = std::min(lowest, piece.valueLsb);
+        top = std::max(top, piece.valueLsb + piece.bits);
+    }
+    if (field.round && lowest > 0) {
+        value += int64_t{1} << static_cast<unsigned>(lowest - 1);
+    }
+    uint64_t kept = 0;
+    for (const ptasm::FieldPiece& piece : field.pieces) {
+        uint64_t const bits = (static_cast<uint64_t>(value) >> static_cast<unsigned>(piece.valueLsb)) &
+                              ((uint64_t{1} << static_cast<unsigned>(piece.bits)) - 1);
+        kept |= bits << static_cast<unsigned>(piece.valueLsb - lowest);
+    }
+    int const width = top - lowest;
+    if (field.isSigned && width > 0 && width < kWidestTest && ((kept >> static_cast<unsigned>(width - 1)) & 1U) != 0) {
+        return static_cast<int64_t>(kept) - (int64_t{1} << static_cast<unsigned>(width));
+    }
+    return static_cast<int64_t>(kept);
+}
+
+bool sameName(const std::string& one, const std::string& other) {
+    return std::ranges::equal(one, other, [](unsigned char left, unsigned char right) {
+        return std::tolower(left) == std::tolower(right);
+    });
+}
+
+// The line's operand at each of the pseudo-instruction's positions (an
+// AT&T scaled index's first entry).
+std::vector<const Operand*> operandsByPosition(const Instruction& source, size_t count) {
+    std::vector<const Operand*> byPosition(count, nullptr);
+    for (const Operand& arg : source.operands) {
+        if (arg.type != ArgType::none && arg.operand < count && byPosition[arg.operand] == nullptr) {
+            byPosition[arg.operand] = &arg;
+        }
+    }
+    return byPosition;
+}
+
+// Each operand of an expanded instruction that names one of the
+// pseudo-instruction's operands becomes the line's, keeping the address
+// part the expansion wraps it in.
+void substitute(Instruction& part, const ptasm::Pseudo& pseudo, const std::vector<const Operand*>& byPosition) {
+    for (Operand& arg : part.operands) {
+        if (arg.terms.size() != 1 || arg.terms[0].label.empty() || arg.terms[0].negated) {
+            continue;
+        }
+        auto const name = std::ranges::find_if(
+            pseudo.names, [&](const std::string& candidate) { return sameName(candidate, arg.terms[0].label); });
+        if (name == pseudo.names.end()) {
+            continue;
+        }
+        const Operand* actual = byPosition[static_cast<size_t>(name - pseudo.names.begin())];
+        if (actual == nullptr) {
+            continue;
+        }
+        Operand replacement = *actual;
+        replacement.operand = arg.operand;
+        if (!arg.part.empty()) {
+            replacement.part = arg.part;
+        }
+        arg = std::move(replacement);
+    }
+}
+
+// A register or number operand as Intel text, to put in an expansion
+// (inside a memory operand too); nothing for any other kind.
+std::optional<std::string> operandText(const Operand& arg) {
+    if (arg.type == ArgType::reg) {
+        return "R" + std::to_string(arg.value);
+    }
+    if (arg.type != ArgType::immediate || !arg.part.empty()) {
+        return std::nullopt;
+    }
+    if (arg.terms.empty()) {
+        return std::to_string(arg.value);
+    }
+    std::string text;
+    for (const Term& term : arg.terms) {
+        std::string const item = term.label.empty() ? std::to_string(term.value) : term.label;
+        if (text.empty()) {
+            text = term.negated ? "-" + item : item;
+        } else {
+            text += term.negated ? " - " : " + ";
+            text += item;
+        }
+    }
+    return text;
+}
+
+// The expansion with each register or number operand's name replaced by
+// its text; "+ -4" becomes "- 4", as the source grammar writes it.
+std::string withOperandText(const std::string& text, const ptasm::Pseudo& pseudo,
+                            const std::vector<const Operand*>& byPosition) {
+    std::string result = text;
+    for (size_t index = 0; index < pseudo.names.size(); ++index) {
+        std::optional<std::string> const replacement =
+            byPosition[index] != nullptr ? operandText(*byPosition[index]) : std::nullopt;
+        if (!replacement) {
+            continue;
+        }
+        std::regex const name("\\b" + pseudo.names[index] + "\\b", std::regex::icase);
+        result = std::regex_replace(result, name, *replacement);
+    }
+    static const std::regex kPlusMinus(R"(\+\s*-\s*)");
+    return std::regex_replace(result, kPlusMinus, "- ");
+}
+
+std::string acceptedForms(const ptasm::Pseudo& pseudo) {
+    std::string accepted;
+    for (const std::string& text : pseudo.formTexts) {
+        accepted += accepted.empty() ? "" : "; ";
+        accepted += text;
+    }
+    return accepted;
+}
+
+} // namespace
+
+const ptasm::Pseudo::Alternative* Assembler::chooseAlternative(const ptasm::Pseudo& pseudo,
+                                                               const std::vector<const Operand*>& byPosition) const {
+    for (const ptasm::Pseudo::Alternative& alternative : pseudo.alternatives) {
+        if (alternative.test.empty()) {
+            return &alternative;
+        }
+        const Operand* tested = byPosition[alternative.operand];
+        std::optional<int64_t> value = tested != nullptr ? knownValue(*tested) : std::nullopt;
+        if (value && !alternative.part.empty()) {
+            value = partValue(pseudo, alternative, *value, byPosition);
+        }
+        if (value && passes(alternative, *value)) {
+            return &alternative;
+        }
+    }
+    return nullptr; // the loader requires a last, general alternative
+}
+
+// The bits an address part keeps of `value`: from the expansion
+// instruction that uses that part of the operand, through its field, as
+// the encoder keeps them (its rounding, then its pieces, sign-extended
+// if the field is signed).
+std::optional<int64_t> Assembler::partValue(const ptasm::Pseudo& pseudo, const ptasm::Pseudo::Alternative& tested,
+                                            int64_t value, const std::vector<const Operand*>& byPosition) const {
+    std::optional<Statement> part = partUse(pseudo, tested, byPosition);
+    if (!part) {
+        return std::nullopt;
+    }
+    const ptasm::Encoding* encoding = cpu->isa().find(instructionOf(*part)->mnemonic, classifier.formOf(*part, false));
+    if (encoding == nullptr) {
+        return std::nullopt;
+    }
+    for (const Operand& arg : instructionOf(*part)->operands) {
+        if (arg.part != tested.part) {
+            continue;
+        }
+        for (const auto& [field, where] : encoding->operandFields) {
+            if (std::cmp_equal(where.position, arg.operand) && where.part.starts_with("num")) {
+                return keptBits(*cpu->isa().field(field), value);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+// The expansion instruction that uses the tested part of the operand,
+// its operands put in.
+std::optional<Statement> Assembler::partUse(const ptasm::Pseudo& pseudo, const ptasm::Pseudo::Alternative& tested,
+                                            const std::vector<const Operand*>& byPosition) const {
+    std::string const use = tested.part + "(" + pseudo.names[tested.operand] + ")";
+    for (const ptasm::Pseudo::Alternative& alternative : pseudo.alternatives) {
+        for (const std::string& line : alternative.lines) {
+            std::string compact;
+            std::ranges::copy_if(line, std::back_inserter(compact), [](char letter) { return letter != ' '; });
+            if (compact.find(use) == std::string::npos) {
+                continue;
+            }
+            for (const SourceStatement& statement : parse(line + "\n", Syntax::intel)) {
+                const Statement* parsed = std::get_if<Statement>(&statement);
+                if (parsed != nullptr && instructionOf(*parsed) != nullptr) {
+                    Statement part = *parsed;
+                    substitute(*instructionOf(part), pseudo, byPosition);
+                    return part;
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+// NOLINTBEGIN(misc-no-recursion): an expansion's instructions are real
+// ones (the loader checks), so addStatement recurses at most once.
+bool Assembler::expandPseudo(const Statement& line, const ptasm::Pseudo& pseudo) {
+    const Instruction& source = *instructionOf(line);
+    ptasm::Form const form = classifier.formOf(line, false);
+    if (!pseudo.forms.contains(form)) {
+        diagnostics->error(line.lineNumber, source.mnemonic + " has no '" + ptasm::formText(form) + "' form; " +
+                                                source.mnemonic + " accepts: " + acceptedForms(pseudo));
+        return false;
+    }
+    std::vector<const Operand*> const byPosition = operandsByPosition(source, pseudo.names.size());
+    const ptasm::Pseudo::Alternative* chosen = chooseAlternative(pseudo, byPosition);
+    if (chosen == nullptr) {
+        return false;
+    }
+    std::string text;
+    for (const std::string& instruction : chosen->lines) {
+        text += withOperandText(instruction, pseudo, byPosition) + "\n";
+    }
+    std::vector<Statement> expanded;
+    for (const SourceStatement& statement : parse(text, Syntax::intel)) {
+        if (const Statement* part = std::get_if<Statement>(&statement)) {
+            expanded.push_back(*part);
+        }
+    }
+    bool added = true;
+    for (size_t index = 0; index < expanded.size(); ++index) {
+        Statement& part = expanded[index];
+        substitute(*instructionOf(part), pseudo, byPosition);
+        part.lineNumber = line.lineNumber;
+        part.expansion = Statement::Expansion{.mnemonic = source.mnemonic, .part = index + 1, .parts = expanded.size()};
+        added = addStatement(std::move(part)) && added;
+    }
+    return added;
+}
+
 bool Assembler::addStatement(Statement line) {
+    if (const Instruction* instruction = instructionOf(line)) {
+        if (const ptasm::Pseudo* pseudo = cpu->isa().pseudo(instruction->mnemonic)) {
+            return expandPseudo(line, *pseudo);
+        }
+    }
 
 		// Checked before any encoding: an out-of-range register in any arg
 		// skips the line entirely (no bytes, no address advance).
@@ -363,6 +643,8 @@ bool Assembler::addStatement(Statement line) {
 
 		return true;
 	};
+
+// NOLINTEND(misc-no-recursion)
 
 int Assembler::addressSlotBytes() const {
         int bytes = 1;

@@ -8,15 +8,15 @@ One well-specified instruction set in all three of the project's planned forms -
 
 ## Tickets
 
-- T1: Instruction semantics (micro-ops) and an ABI block -- Assigned -- design agreed (2026-11-16); notation amended (2026-11-17, 2026-11-18); its vocabulary drafted for review (2026-11-18); then implement after E1.T1.
+- T1: Instruction semantics (micro-ops) and an ABI block -- Completed (0.2.2), 2026-11-19. Design agreed 2026-11-16, notation amended 2026-11-17 and 2026-11-18, vocabulary approved 2026-11-19; built in the eight steps below.
 - T2: The machine file in layers: compiler target, processor, computer -- In progress (2026-11-18) -- the cpu layer done (`include`, `replace`, models, errors at their file, `--origins`, `--dump-machine`); widening open; the system and board layers with 0.3.
-- T3: One grammar for the machine file's small languages -- Completed (0.2.1), 2026-11-18 -- for C++; the Python target comes with E5.T1's tester.
+- T3: One grammar for the machine file's small languages -- Completed (0.2.1), 2026-11-18. No Python target was needed: E5.T1's tester reads the semantics in ptasm's standard spelling from `--dump-forms` (2026-11-19), so ptasm's grammar is their one parser.
 
 ## Addenda
 
 ### A1: RV32I and OR1K in every form
 
-**Status:** Assigned
+**Status:** Assigned -- the machine-file half done in 0.2.2 (2026-11-19, E5.T1): both have semantics for every instruction, an `abi` block checked against GCC, and programs checked against QEMU. TableGen and TCG come with 0.4's and 0.3's writers.
 
 Both targets of E7 of 0.1, expressed as cpu.json, TableGen and TCG.
 

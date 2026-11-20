@@ -24,7 +24,8 @@
           "registers": { "type": "object" },
           "replace": { "type": "object" },
           "fields": { "type": "object" }, "formats": { "type": "object" }, "modes": { "type": "object" },
-          "operandSets": { "type": "object" }, "modeSets": { "type": "object" }, "instructions": { "type": "object" }
+          "operandSets": { "type": "object" }, "modeSets": { "type": "object" }, "instructions": { "type": "object" },
+          "semSets": { "type": "object" }, "helpers": { "type": "object" }
         },
         "additionalProperties": false
       }
@@ -47,7 +48,74 @@
     "modes": { "type": "object" },
     "operandSets": { "type": "object" },
     "modeSets": { "type": "object" },
-    "instructions": { "type": "object" }
+    "instructions": { "type": "object" },
+    "semSets": {
+      "type": "object",
+      "description": "Shared semantics, each by its name: an instruction's or a mode set's \"sem\" may name one, its {placeholders} filled from \"semArgs\".",
+      "additionalProperties": { "$ref": "#/$defs/sem" }
+    },
+    "operandSemantics": {
+      "type": "object",
+      "description": "What an operand in a mode means, for $n and ea(n) in semantics: each mode (numbers written imm) with its \"ea\" (its address) and/or \"value\", expressions in its parts reg1, reg2, num1, num2. reg, imm, [reg], [imm], [reg + imm] and [reg + reg] are worked out; a memory operand's value defaults to a load at regBits.",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "ea": { "type": "string" }, "value": { "type": "string" } }
+      }
+    },
+    "abi": {
+      "type": "object",
+      "description": "The calling convention, for a compiler and a debugger: register roles (registers are register-list names or R<n>), how arguments and results are passed, the C types, the frame, the breakpoint instruction. ptasm checks it; it doesn't use it.",
+      "additionalProperties": false,
+      "properties": {
+        "stack": { "type": "object", "required": ["register"], "additionalProperties": false, "properties": {
+          "register": { "type": "string" }, "grows": { "enum": ["down", "up"] }, "align": { "type": "integer", "minimum": 1 },
+          "redZone": { "type": "integer", "minimum": 0 }, "minFrame": { "type": "integer", "minimum": 0 } } },
+        "link": { "type": "string" },
+        "frame": { "type": "object", "additionalProperties": false, "properties": {
+          "register": { "type": "string" },
+          "order": { "type": "array", "items": { "enum": ["lr", "fp", "calleeSaved", "locals", "outgoing"] } },
+          "calleeSaved": { "enum": ["ascending", "descending"] }, "points": { "enum": ["cfa", "bottom"] } } },
+        "threadPointer": { "type": "string" },
+        "got": { "type": "string" },
+        "globalPointer": { "type": "object", "required": ["register", "symbol"], "additionalProperties": false,
+          "properties": { "register": { "type": "string" }, "symbol": { "type": "string" } } },
+        "args": { "type": "object", "additionalProperties": false, "properties": {
+          "registers": { "type": "array", "items": { "type": "string" } },
+          "pair": { "enum": ["consecutive", "even"] }, "variadicPair": { "enum": ["consecutive", "even"] },
+          "splitPair": { "type": "boolean" }, "variadic": { "enum": ["registers", "stack"] },
+          "aggregates": { "enum": ["reference", "value"] }, "aggregateValueMax": { "type": "integer", "minimum": 0 },
+          "stackBase": { "type": "integer", "minimum": 0 }, "homeSlots": { "type": "boolean" },
+          "pairStackAlign": { "type": "integer", "minimum": 1 } } },
+        "returns": { "type": "object", "additionalProperties": false, "properties": {
+          "registers": { "type": "array", "items": { "type": "string" } },
+          "sret": { "type": "object", "required": ["pointer"], "additionalProperties": false, "properties": {
+            "pointer": { "type": "string" }, "returned": { "type": "string" }, "above": { "type": "integer", "minimum": 0 } } } } },
+        "calleeSaved": { "type": "array", "items": { "type": "string" } },
+        "eh": { "type": "object", "additionalProperties": false, "properties": {
+          "dataRegs": { "type": "array", "items": { "type": "string" } } } },
+        "vaList": { "enum": ["pointer", "struct"] },
+        "types": { "type": "object", "additionalProperties": false,
+          "patternProperties": { "^(char|short|int|long|longLong|pointer|float|double|longDouble)$": {
+            "type": "object", "required": ["size"], "additionalProperties": false, "properties": {
+              "size": { "enum": [1, 2, 4, 8, 16] }, "align": { "type": "integer", "minimum": 1 }, "signed": { "type": "boolean" } } } },
+          "properties": { "sizeT": { "type": "string" }, "wcharT": { "type": "string" } } },
+        "breakpoint": { "type": "string", "description": "The instruction a debugger writes for a software breakpoint." }
+      }
+    },
+    "helpers": {
+      "type": "object",
+      "description": "Operations the semantics vocabulary can't express, each written by hand in every writer, declared with the fields, registers and flags it reads (uses) and writes (defs).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["uses", "defs"],
+        "properties": {
+          "uses": { "type": "array", "items": { "type": "string" } },
+          "defs": { "type": "array", "items": { "type": "string" } },
+          "sideEffects": { "type": "boolean" }
+        }
+      }
+    }
   },
   "if": { "required": ["cpuName"], "not": { "required": ["include"] } },
   "then": {
@@ -68,6 +136,19 @@
     }
   },
   "$defs": {
+    "sem": {
+      "type": "string",
+      "description": "What an instruction does, in micro-ops: statements separated by ';', every operation a call (set(rd, add(rs1, rs2)); if(c, set(PC, target))), or the name of a \"semSets\" entry. ptasm checks it when it loads the file: the grammar, each operation, every name (a field of the form, a register, a flag, a temporary, PC, pc.next)."
+    },
+    "delaySlot": {
+      "type": "integer", "minimum": 0, "maximum": 8,
+      "description": "How many instructions after a jump run before it takes effect (OR1K, SPARC: 1). On a mode set or an instruction; the instruction's wins."
+    },
+    "semArgs": {
+      "type": "object",
+      "description": "The text each {placeholder} in the sem stands for.",
+      "additionalProperties": { "type": "string" }
+    },
     "register": {
       "description": "A register's name: its number (\"BX\": 3), or an object. In the object, a general register has a number; the program counter may have none (role pc); a register outside the general ones has a space and an index there; a part of another names its parent, its lsb there and how writing it treats the rest; an alias names the register it is another name for, and nothing else.",
       "oneOf": [
@@ -85,7 +166,12 @@
             "parent": { "type": "string" },
             "lsb": { "type": "integer", "minimum": 0 },
             "writes": { "enum": ["merge", "zeroExtend"] },
-            "alias": { "type": "string" }
+            "alias": { "type": "string" },
+            "flags": {
+              "type": "object",
+              "description": "A flags register's flags, each by its bit: { \"C\": 0, \"Z\": 1 }. Semantics read and write them by name.",
+              "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 63 }
+            }
           }
         }
       ]
@@ -184,6 +270,9 @@
       "properties": {
         "formats": { "$ref": "#/$defs/formatMap" },
         "set": { "$ref": "#/$defs/setValues" },
+        "sem": { "$ref": "#/$defs/sem" },
+        "semArgs": { "$ref": "#/$defs/semArgs" },
+        "delaySlot": { "$ref": "#/$defs/delaySlot" },
         "patterns": {
           "type": "object",
           "additionalProperties": {
@@ -211,7 +300,9 @@
           "type": "object",
           "additionalProperties": { "type": "string", "pattern": "^op[1-9]\\.(reg|num)[12]$" }
         },
-        "bytes": { "type": "string", "pattern": "^\\s*(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3})(\\s+(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3}))*\\s*$" }
+        "bytes": { "type": "string", "pattern": "^\\s*(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3})(\\s+(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3}))*\\s*$" },
+        "sem": { "$ref": "#/$defs/sem" },
+        "semArgs": { "$ref": "#/$defs/semArgs" }
       }
     },
     "instruction": {
@@ -222,8 +313,43 @@
         "set": { "$ref": "#/$defs/setValues" },
         "only": { "type": "array", "items": { "type": "string" } },
         "remove": { "type": "array", "items": { "type": "string" } },
-        "forms": { "type": "object", "additionalProperties": { "$ref": "#/$defs/override" } }
+        "forms": { "type": "object", "additionalProperties": { "$ref": "#/$defs/override" } },
+        "sem": { "$ref": "#/$defs/sem" },
+        "semArgs": { "$ref": "#/$defs/semArgs" },
+        "delaySlot": { "$ref": "#/$defs/delaySlot" },
+        "target": { "$ref": "#/$defs/target" },
+        "commutes": { "$ref": "#/$defs/commutes" },
+        "sideEffects": { "type": "boolean", "description": "Worked out from the semantics; written plainly it must agree, so an override goes in \"replace\"." },
+        "operands": { "type": "string", "description": "A pseudo-instruction's operand pattern, each operand named for \"becomes\": \"rd:reg, value:imm\"." },
+        "becomes": {
+          "description": "A pseudo-instruction: what it is assembled as, in assembly text (Intel order; instructions separated by ';'), or alternatives tried in order, each with a \"when\" (fits(name, bits) or fitsu(name, bits)) but the last.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "minItems": 1, "items": { "oneOf": [
+              { "type": "string" },
+              { "type": "object", "required": ["do"], "additionalProperties": false,
+                "properties": { "when": { "type": "string" }, "do": { "type": "string" } } } ] } }
+          ]
+        },
+        "replace": {
+          "type": "object",
+          "description": "Overrides of the facts the semantics work out.",
+          "additionalProperties": false,
+          "properties": {
+            "target": { "$ref": "#/$defs/target" },
+            "commutes": { "$ref": "#/$defs/commutes" },
+            "sideEffects": { "type": "boolean" }
+          }
+        }
       }
+    },
+    "target": {
+      "enum": ["data", "call", "jump"],
+      "description": "What the instruction's pc-relative field is: a call's target, a jump's, or data. Worked out from the semantics; written for an instruction without them."
+    },
+    "commutes": {
+      "description": "The two register fields that may swap, or false. Worked out from the semantics.",
+      "oneOf": [ { "const": false }, { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 } ]
     }
   }
 }

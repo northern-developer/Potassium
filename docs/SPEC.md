@@ -35,8 +35,10 @@ ptasm --list-machines
 | `--diagnostics-format text\|json\|sarif` | How warnings and errors are written (§9.3): GCC-style text, JSON (one object per line) or one SARIF 2.1.0 log. | `text` |
 | `-v`, `--verbose` | Print the CPU header, internal trace output, a summary of the effective settings and `Done.`. Never changes what counts as an error. | off |
 | `-I`, `--isa` | Print the cpu.json's CPU header and every supported mnemonic/operand combination, then exit. | — |
+| `--semantics` | With `-I`: each form, then its semantics and what ptasm works out from them (§6.9), or "no semantics". | off |
 | `--origins` | With `-I`: each form with the machine file (and model) that defined its instruction, and every file that changed or removed it; then the instructions a later file or model removed (§6.1). | off |
 | `--dump-machine` | Print `-m`'s machine file as ptasm loaded and checked it: includes merged, its model applied, as JSON. Then exit; no source needed. | -- |
+| `--dump-forms` | Print every instruction form as ptasm expanded it, as JSON: its size, each field's placement and build, its fixed values, which operand part fills each field, its semantics and delay slot; with the description, the register list and the `abi` block. What the semantics tester decodes from. Then exit; no source needed. | -- |
 | `-p`, `--pad` | `-f bin` only: zero-fill from address 0 up to the lowest section address. | off |
 | `-g` | `-f elf` only (with another format it is an error): add DWARF 5 source-line information (§8.4), so a debugger can map addresses to source lines. | off |
 | `--defsym NAME=value` | Define a constant, as `NAME .EQU value` would before the first line (§2.4). `value` is a decimal or `0x` number, optionally negative; `NAME` is spelled as in the source and can't be a register (`R<n>`, `PC`, `RIP`, or a name in the CPU's register list). Repeatable; the same name twice is an error. | -- |
@@ -299,6 +301,9 @@ once). Unknown keys are errors.
 | `operandSets` | Named groups of modes (§6.5). |
 | `modeSets` | Families of instructions that share encodings (§6.6). |
 | `instructions` | The instructions, by mnemonic (§6.7). Required. |
+| `semSets` | Shared semantics, by name (§6.9). Optional. |
+| `helpers` | Operations the semantics can't express, declared (§6.9). Optional. |
+| `abi` | The calling convention, for a compiler and a debugger (§6.10). Optional. |
 | `include` | The machine files this one builds on (below). Optional. |
 | `replace` | Changes to what the included files give (below). Optional. |
 | `models` | Named variants, each a container (below). Optional. |
@@ -420,13 +425,14 @@ The value is the register's number (`"BX": 3`), or an object:
 
 | Key | Meaning |
 |---|---|
-| `number` | The general register, below `regCount`. Several names may share one. |
+| `number` | The general register, below `regCount`. Several names may share one. An entry named `R<n>` (any case) describes general register n itself, so its number is n: `"r0": {"number": 0, "const": 0}`. |
 | `bits` | Its width; `regBits` if not given. |
 | `role` | `pc`, `sp`, `link` or `flags`. A `pc` entry may have no number (AMD64's `RIP`). |
 | `const` | It reads as this value (RISC-V's `x0`). |
 | `space`, `index` | A register outside the general ones, in a named space, in place of `number`: `"SR": {"space": "spr", "index": 17}`. |
 | `parent`, `lsb`, `writes` | A part of another register: which, where its lowest bit is in it, and what writing the part does to the rest, `merge` (kept: `AX`, `AL`, `AH`) or `zeroExtend` (cleared: AMD64's `EAX` in `RAX`). |
 | `alias` | Another name for the register it names, with all of that register's values, and no other keys: `"a0": {"alias": "x10"}`. |
+| `flags` | A flags register's flags, each by its bit: `"SR": {"number": 2, "role": "flags", "flags": {"C": 0, "Z": 1, "N": 2, "V": 8}}`. Each bit is inside the register's width; a flag's name is no register's, and no other register's flag. Semantics use flags by name (§6.9). |
 
 ```json
 "registers": {
@@ -458,7 +464,7 @@ them.
 | `pieces` | Instead of `bits`/`lsb`/`valueLsb`: a list of such pieces, all filled from one value (e.g. RISC-V's scattered branch offset). No value bit may be taken twice. |
 | `value` | `con` only: the constant. |
 | `signed` | An `imm` or `addr` field the CPU sign-extends (AMD64's REX.W `imm32`): `true` makes its value fit as two's complement only (`0x80000000` doesn't fit 32 bits), and an `addr` field's relocation `addr<W>:signed` (§8.4). Optional, default `false`. |
-| `target` | A `pcrel` field's operand: `"data"` (the default), `"call"` (a call's target) or `"jump"` (a jump's or branch's). Picks the relocation type; with `elf.globalJumps: "resolve"`, a `jump` to a `.GLOBAL` label in the same section is resolved rather than relocated (§8.4). |
+| `target` | A `pcrel` field's operand: `"data"` (the default), `"call"` (a call's target) or `"jump"` (a jump's or branch's). Picks the relocation type; with `elf.globalJumps: "resolve"`, a `jump` to a `.GLOBAL` label in the same section is resolved rather than relocated (§8.4). The target is each form's: worked out from its semantics when it has them (§6.9), else the instruction's `target`, else the field's. A field `target` that a form's semantics contradict is an error: leave it off. |
 | `round` | An `imm` or `addr` field taking a high address part whose low part the CPU sign-extends (RISC-V's `%hi`, OR1K's `ha`): `true` adds half the unit of its lowest taken bit (`valueLsb`) first, `(x + 0x800) >> 12` for `"valueLsb": 12`. Optional, default `false`. |
 | `relocation` | An `addr` or `pcrel` field's own ELF relocation type, an integer, for when the `elf.relocations` lookup by kind and width can't tell this field's layout from another's (RISC-V's `R_RISCV_LO12_I` and `LO12_S`). The relocation then covers the whole instruction (§8.4). Optional. |
 
@@ -567,6 +573,8 @@ A mode set is a family of instructions that share their encodings:
 - `modeFrom` names the operand whose mode supplies the `modes` values
   and picks the format from `formats` (by that mode, else `"default"`);
   a pattern's `formats` and `set` override the family's.
+- `sem`, `semArgs` (§6.9) and `delaySlot` (§6.10) given here apply to
+  every instruction of the family that doesn't give its own.
 - A mode with no register or number for a field picks a format that
   claims those bits `unused`.
 
@@ -583,7 +591,10 @@ A mode set is a family of instructions that share their encodings:
 | `modeSet` | The family whose patterns and encodings the instruction takes. |
 | `set` | Values for `set` fields (its opcode, ...); they win over the family's and the modes'. |
 | `only` / `remove` | Patterns limiting its forms; an entry that matches none of the family's forms is an error. |
-| `forms` | Explicit encodings by form, which win over the family's: `format` (or an inline `size`/`fields`/`unused`), `set`, `from` (field -> operand part, `"op2.num1"`), or `bytes` (a fixed byte sequence, `"0x0F 0x05"`). |
+| `forms` | Explicit encodings by form, which win over the family's: `format` (or an inline `size`/`fields`/`unused`), `set`, `from` (field -> operand part, `"op2.num1"`), or `bytes` (a fixed byte sequence, `"0x0F 0x05"`); and the form's own `sem`/`semArgs` (§6.9). |
+| `sem`, `semArgs` | What the instruction does, and the text of its `{placeholders}` (§6.9). A mode set may also give a `sem`, a template its instructions fill. |
+| `delaySlot` | How many instructions after it run before its jump takes effect (§6.10). |
+| `operands`, `becomes` | A pseudo-instruction: its operands, each named, and the real instructions it is assembled as (§6.11). |
 
 Mnemonics are case-insensitive. When the file loads, every
 instruction form is built and checked: each field of its format is
@@ -598,6 +609,243 @@ Every problem found while loading a cpu.json is reported with the key,
 field, format, mode set or instruction (and form) it belongs to. It is
 an error unless `-w` is given, in which case assembly continues. An
 unreadable file or invalid JSON is always an error.
+
+### 6.9 Semantics
+
+What an instruction does, in micro-ops: optional, for the writers
+(an emulator, a compiler) and the semantics tester; the assembler
+doesn't use it, and a machine file without semantics loads as before.
+
+```json
+"semSets": { "alu": "set(rd, {op}(rs1, rs2))" },
+"modeSets": { "branch": { ..., "sem": "if(setcc(rs1, rs2, {cc}), set(PC, b_off))" } },
+"instructions": {
+  "ADD": { "modeSet": "r", "set": {...}, "sem": "alu", "semArgs": { "op": "add" } },
+  "BEQ": { "modeSet": "branch", "set": {...}, "semArgs": { "cc": "eq" } },
+  "LW":  { "modeSet": "load", "set": {...}, "sem": "set(rd, load.s32(add(rs1, i_imm)))" },
+  "JAL": { "forms": {...}, "sem": "set(rd, pc.next); set(PC, j_off)" },
+  "LUI": { "forms": { "reg, imm": { ..., "sem": "set(rd, shl(u_imm, 12))" },
+                      "reg, %hi(imm|local|reloc)": { ..., "sem": "set(rd, u_hi)" } } }
+}
+```
+
+**Where it comes from.** A form's semantics are its own `sem`, else
+its instruction's, else its mode set's. A `sem` is a string, or the
+name of a `semSets` entry. Its `{placeholders}` are filled from
+`semArgs`, merged from the mode set, the instruction and the form (the
+more specific winning); every placeholder must be filled, and every
+`semArgs` entry at or below the `sem`'s level must fill one.
+
+**Notation.** Statements separated by `;`, each a call; an empty
+string does nothing.
+
+| Statement | Meaning |
+|---|---|
+| `set(X, v)` | Write `v` to `X`: a register field of the form, a register, a flag, a temporary, or `PC`. |
+| `if(c, s, ...)` | Run the statements when `c` is 1. Only side effects: a write to `PC`, a store, a trap, a helper; a conditional data write is `set(X, select(c, a, X))`. |
+| `store.N(a, v)` | Store `v`'s low N bits (8, 16, 32 or 64) at address `a`. |
+| `fence()`, `halt()` | A memory barrier; stop. |
+| `trap(name)`, `trap(name, code)` | Raise the named trap (`syscall`, `breakpoint`, `illegal`, `divide`, ...). |
+| `helper(name, args...)` | Call a declared helper (below). |
+
+| Value | Meaning |
+|---|---|
+| a field name (`rd`, `i_imm`, `b_off`) | The form's operand: a register's value, or the number **as the assembler writes it**: a pc-relative field is the target address, not the encoded distance. |
+| a register-list name, `R<n>`, a flag | That register or flag (case-insensitive). |
+| `PC`, `pc.next` | This instruction's address; the address after it and its delay slot. |
+| `$n`, `ea(n)` | Operand n's value, and its address when it is in memory, whatever its addressing mode (below). |
+| `t0`, `t1`, ... | Temporaries, local to the instruction; set before they are read. |
+| `5`, `-1`, `0x7F` | Numbers. |
+
+Operations, by group (the full list, with what each means and where it
+is defined, is plan 0.2:E5.T1's vocabulary):
+
+- arithmetic: `add sub mul neg mulhs mulhu mulhsu sdiv srem udiv urem smin smax umin umax abs`;
+- logic: `and or xor not andn orn xnor`;
+- shifts: `shl srl sra rotl rotr` (the amount below the width), `fshl fshr`;
+- compare: `setcc(a, b, cc)` with `cc` one of `eq ne lt le gt ge ult ule ugt uge`; `select(c, a, b)`;
+- width: `sext.N zext.N trunc.N` (the width required);
+- bit fields: `extract(a, lsb, bits)`, `deposit(a, v, lsb, bits)`;
+- bit counts: `ctlz cttz ctpop bswap bitreverse`;
+- memory: `load.uN`, `load.sN` (N 8, 16, 32, 64);
+- carry and overflow, each 0 or 1: `uaddo saddo usubo` (the borrow) `ssubo`, `ncarry.sub` (NOT borrow), `uaddo_carry saddo_carry usubo_carry ssubo_carry`, `umulo smulo`;
+- flag values: `zero sign parity halfcarry.add halfcarry.sub`.
+
+Any operation may give a width as a suffix, `rotr.17(x, n)`; values
+are otherwise the register width.
+
+**Reads see the state before the instruction**: every value is computed
+from the registers and memory as they were when it started, so the order
+of the writes doesn't matter, and a carry in reads the old carry.
+Temporaries are the exception: a temporary is read after it is set.
+An exception's condition is a read like any other: "overflow, then
+trap" recomputes the overflow, `if(and(OVE, saddo(rA, rB)),
+trap(range))`, rather than reading the `OV` the instruction sets.
+
+**What is worked out.** From each form's semantics, ptasm works out
+the facts the writers need, and shows them with `-I --semantics` and
+`--dump-forms`:
+
+| Fact | Worked out from |
+|---|---|
+| `uses`, `defs` | The registers and flags it reads and writes, other than its operand fields and `PC`, and a helper's declared ones. |
+| `roles` | Each operand field's: a register field written (`dst`), read (`src`) or both (`srcdst`); a number field that becomes `PC` (`target`), is inside a load's or store's address (`address`), or otherwise a `value`. |
+| `flow` | `call` if it writes `PC` and gives a register the return address (`pc.next` or `PC`); else `branch` if the write to `PC` is under `if`; `return` if `PC` comes from the `abi` link register; `jump` for another write to `PC`; `trap` for a trap with no write to `PC`. `indirect` when the target comes from a register; `link`, the field or register given the return address. A call through a link field (RV32I's `JAL rd`) is a jump when the field is the zero register, and a jump to the link register a return (OR1K's `l.jr r9`): writers decide those per use. |
+| `loads`, `stores` | Each `load.*` and `store.*`, with its width and extension. |
+| `sideEffects` | A trap, `halt`, `fence`, a helper declared with side effects, or a write to a whole register in a space (`SR`, not just its flags). |
+| `commutes` | Two register fields only read that may swap with every result the same (the operations `add`, `and`, `or`, `xor`, the carries ... being symmetric). |
+| `move` | `reg` or `imm`: the semantics are one copy into a register field. |
+| `target` | A pcrel field that becomes `PC`: `call` for a call, else `jump`. |
+
+An instruction may write `target`, `commutes` (two fields, or `false`)
+or `sideEffects`: plainly, the value must agree with what is worked
+out; inside `replace`, it wins, as an override of the worked-out fact:
+
+```json
+"replace": { "instructions": { "ADD": { "commutes": false } } }
+```
+
+Such a `replace` may name a fact no file wrote. Without semantics,
+the plain value is the fact (RV32I's pseudo-instruction `J` has
+`"target": "jump"`).
+
+**Helpers**: an operation the vocabulary can't express (a block move,
+a CSR access) is a helper, written by hand in each writer and declared
+once with what it reads and writes:
+
+```json
+"helpers": { "mfspr": { "uses": ["rA"], "defs": ["rD"], "sideEffects": true } }
+```
+
+**What ptasm checks** when it loads the file, reporting each problem at
+the column of the `sem`, under the file that wrote it:
+the grammar; that each operation exists, with its number of arguments
+and its width; that every name is a field of each form the `sem`
+applies to, a register, a flag, a temporary set before, `PC` or
+`pc.next`; that only a register field, a register, a flag, a temporary
+or `PC` is written, and nothing twice (except `PC` under `if`); that
+`if` guards only side effects; that a helper is declared and its
+`uses`/`defs` name fields, registers or flags.
+
+**Operands with several addressing modes**: `$n` is operand n's value
+and `ea(n)` its address, so one `sem` serves every form of an
+instruction whose operands take several modes (`set(rd, $2)` for `MOV
+rd, src`). In each form they become the form's own fields: in `reg`
+mode `$n` is the register (and `set($n, v)` writes it), in `imm` the
+number, in a memory mode `ea(n)` is the address and `$n` the word
+there, `load.u<regBits>(ea(n))` (and `set($n, v)` a store). `reg`,
+`imm`, `[reg]`, `[imm]`, `[reg + imm]` and `[reg + reg]` are worked out;
+any other mode an instruction uses with `$n` or `ea(n)` is written in
+`operandSemantics`, in the mode's parts (`reg1`, `reg2`, `num1`,
+`num2`):
+
+```json
+"operandSemantics": { "[[reg + imm]]": { "ea": "load.u16(add(reg1, num1))" } }
+```
+
+`value` may be given too, where the operand's value isn't the word at
+its address. TESTCPU-0's `ZMV`, `ZST` and `ZLEA` are the examples,
+run by the tester (`tests/semantics/testcpu-0/`).
+
+### 6.10 `abi` and `delaySlot`
+
+**`delaySlot`**, on a mode set or an instruction (the instruction's
+wins): how many instructions after a jump run before it takes effect,
+0 to 8; OR1K's jumps and branches have 1. An instruction with
+semantics and a delay slot must write `PC`. `pc.next` (§6.9) is the
+address after the instruction and its delay slot, so OR1K's `l.jal`
+links `set(R9, pc.next)` = its address + 8.
+
+**`abi`**: the calling convention, for a compiler and a debugger;
+ptasm checks it and doesn't use it. Registers are register-list names
+or `R<n>`. Every key is optional.
+
+| Key | Meaning |
+|---|---|
+| `stack` | `register` (required), `grows` (`down`/`up`), `align` (a power of two, at calls), `redZone` (bytes below the stack pointer a leaf may use), `minFrame`. |
+| `link` | The return-address register. |
+| `frame` | `register` (the frame pointer), `order` (the frame's parts from its top: `lr`, `fp`, `calleeSaved`, `locals`, `outgoing`), `calleeSaved` (`ascending`/`descending` save order), `points` (`cfa`: the frame pointer holds the stack pointer at entry; `bottom`). |
+| `threadPointer`, `got` | The TLS pointer; the GOT pointer (reserved only in position-independent code). |
+| `globalPointer` | `register` and `symbol`: what startup code sets for linker relaxation (RISC-V `__global_pointer$`). |
+| `args` | `registers`, in order; `pair` (`consecutive`/`even`: where a 64-bit argument's two registers start), `variadicPair` (the same for an unnamed one), `splitPair` (whether a pair may be split between the last register and the stack), `variadic` (`registers`/`stack`: where unnamed arguments go), `aggregates` (`reference`/`value`) with `aggregateValueMax` (bytes passed by value), `stackBase`, `homeSlots`, `pairStackAlign`. |
+| `returns` | `registers`; `sret`: a struct returned through memory, its `pointer` register, the one the callee `returned` it in, and `above` (larger structs only; smaller ones in `registers`). |
+| `calleeSaved` | The registers a function preserves. Any other is the caller's to save. |
+| `eh` | `dataRegs`: the exception-handling data registers (GCC's `__builtin_eh_return_data_regno`). |
+| `vaList` | `pointer` or `struct`. |
+| `types` | C types: `char short int long longLong pointer float double longDouble`, each `{size, align, signed}` (`align` defaults to `size`); `sizeT` and `wcharT`, C type names. |
+| `breakpoint` | The instruction a debugger writes for a software breakpoint (RV32I `EBREAK`). |
+
+```json
+"abi": {
+  "stack": { "register": "R2", "grows": "down", "align": 16, "redZone": 0 },
+  "link": "R1",
+  "args": { "registers": ["R10", "R11", "R12", "R13", "R14", "R15", "R16", "R17"],
+            "pair": "consecutive", "variadicPair": "even", "splitPair": true, "variadic": "registers",
+            "aggregates": "reference", "aggregateValueMax": 8 },
+  "returns": { "registers": ["R10", "R11"], "sret": { "pointer": "R10", "above": 8 } },
+  "types": { "char": { "size": 1, "signed": false }, "longLong": { "size": 8 }, "sizeT": "unsigned int" },
+  "breakpoint": "EBREAK"
+}
+```
+
+`tests/abi/check-abi.py` checks a block against the CPU's GCC (ctest
+label `abi`), and lists what it can't probe.
+
+**The semantics tester**, `tests/semantics/ptsem.py` (ctest label
+`semantics`), runs programs from a machine file's micro-ops: ptasm
+assembles each (`-f srec`), and the tester decodes it from
+`--dump-forms` and executes it from the start address (the S-record
+start, or the lowest address) to the `abi` breakpoint, a `halt()` or a
+step limit, then checks the program's `; expect: R10 = 5` and
+`; expect: mem32[0x100] = 5` comments. A shift by the width or more,
+an undefined value (a division by zero) written or tested, an
+instruction that doesn't decode, or two mnemonics with the same bits
+are failures. Forms of one instruction with the same bits (`LUI`'s
+`imm` and `%hi`) are all run, and must agree. `tests/semantics/qemu_check.py`
+runs the same programs under QEMU's system emulator and compares every
+register, the flags and every byte stored with the tester's (ctest
+label `qemu`): the check a tester of the machine file against itself
+can't make.
+
+### 6.11 Pseudo-instructions: `becomes`
+
+A pseudo-instruction is an `instructions` entry with `operands` and
+`becomes` in place of an encoding (`modeSet`, `forms`) and `sem`:
+
+```json
+"MV":  { "operands": "rd:reg, rs:reg", "becomes": "ADDI rd, rs, 0" },
+"RET": { "operands": "", "becomes": "JALR R0, R1, 0" },
+"LI":  { "operands": "rd:reg, value:imm",
+         "becomes": [ { "when": "fits(value, 12)", "do": "ADDI rd, R0, value" },
+                      { "do": "LUI rd, %hi(value); ADDI rd, rd, %lo(value)" } ] }
+```
+
+- `operands` is an operand pattern (§6.5) with every operand named;
+  a line must match one of its forms.
+- `becomes` is assembly text, in Intel order whatever the source's
+  syntax, instructions separated by `;`; a named operand stands for the
+  line's operand: a register or a number anywhere, inside an address
+  part (`%hi(value)`) or a memory operand (`[rs + off]`), a memory
+  operand whole. Or
+  it is a list of alternatives tried in order: `when` is `fits(name,
+  bits)` (a signed value of that many bits) or `fitsu(name, bits)` (an
+  unsigned one), of the operand or of an address part of it,
+  `fitsu(%lo(value), 0)`: the bits that part keeps, as the field it is
+  placed in keeps them in the expansion that uses it (only 0 fits in 0
+  bits). The last alternative has no `when`. RV32I's `LI` so matches GNU
+  as: `ADDI` when the value fits 12 bits, `LUI` alone when its low part
+  is 0, else both.
+- The choice is made in pass 1: a `when` is tested only on a value pass
+  1 knows (numbers, and `.EQU` constants defined before); otherwise the
+  last alternative is used, so the line's size never changes.
+- An expansion uses real instructions only, never another
+  pseudo-instruction. An entry with both an encoding and `becomes` is
+  an error (kept for equivalent encodings, the wish list).
+- Each instruction of an expansion is its own statement, on the line's
+  number: errors name the line, the listing prints the source once with
+  a row for each further instruction, and `-v` shows the real
+  instructions. `-I --semantics` and `--dump-forms` list the
+  pseudo-instructions and their expansions; `-I` doesn't.
 
 ## 7. Encoding
 

@@ -175,6 +175,16 @@ struct Statement {
 	// Operands naming more than one address, like "a + b": no single
 	// relocation can hold them.
 	std::vector<std::string> unrelocatableExpressions;
+	// For one instruction of a pseudo-instruction's expansion (cpu.json
+	// "becomes", plan 0.2:E5.T1): which it came from and its part, k of
+	// n, so a listing prints the source once and a disassembler can name
+	// the pseudo-instruction.
+	struct Expansion {
+		std::string mnemonic;
+		size_t part{};
+		size_t parts{};
+	};
+	std::optional<Expansion> expansion;
 };
 
 [[nodiscard]] inline Instruction* instructionOf(Statement& line) { return std::get_if<Instruction>(&line.kind); }

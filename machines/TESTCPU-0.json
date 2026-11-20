@@ -4,7 +4,8 @@
   "description": {
     "regCount": 8,
     "addressBits": 16,
-    "byteOrder": "little"
+    "byteOrder": "little",
+    "regBits": 16
   },
   "elf": {
     "elfClass": 32,
@@ -310,6 +311,30 @@
       "build": "addr",
       "bits": 8,
       "lsb": 16
+    },
+    "ZMV": {
+      "build": "con",
+      "value": "0b011010",
+      "bits": 6,
+      "lsb": 2
+    },
+    "ZST": {
+      "build": "con",
+      "value": "0b011011",
+      "bits": 6,
+      "lsb": 2
+    },
+    "ZLEA": {
+      "build": "con",
+      "value": "0b011100",
+      "bits": 6,
+      "lsb": 2
+    },
+    "ZHALT": {
+      "build": "con",
+      "value": "0b011101",
+      "bits": 6,
+      "lsb": 2
     }
   },
   "instructions": {
@@ -1149,6 +1174,234 @@
           }
         }
       }
+    },
+    "ZMV": {
+      "sem": "set(reg_v1, $2)",
+      "forms": {
+        "reg, reg": {
+          "size": 2,
+          "fields": [
+            "ZMV",
+            "mode_hi_00",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        },
+        "reg, [reg]": {
+          "size": 2,
+          "fields": [
+            "ZMV",
+            "mode_hi_00",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1"
+          }
+        },
+        "reg, imm": {
+          "size": 4,
+          "fields": [
+            "ZMV",
+            "mode_hi_01",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        },
+        "reg, [imm]": {
+          "size": 4,
+          "fields": [
+            "ZMV",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        },
+        "reg, [reg + imm]": {
+          "size": 4,
+          "fields": [
+            "ZMV",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        },
+        "reg, [[reg + imm]]": {
+          "size": 4,
+          "fields": [
+            "ZMV",
+            "mode_hi_10",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        }
+      }
+    },
+    "ZST": {
+      "sem": "set($1, reg_v1)",
+      "forms": {
+        "[reg], reg": {
+          "size": 2,
+          "fields": [
+            "ZST",
+            "mode_hi_00",
+            "mode_lo_1",
+            "s1",
+            "reg_v1",
+            "reg_v2"
+          ],
+          "from": {
+            "reg_v2": "op1.reg1",
+            "reg_v1": "op2.reg1"
+          }
+        },
+        "[imm], reg": {
+          "size": 4,
+          "fields": [
+            "ZST",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s1",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "imm_hi_imm_lo": "op1.num1",
+            "reg_v1": "op2.reg1"
+          }
+        },
+        "[reg + imm], reg": {
+          "size": 4,
+          "fields": [
+            "ZST",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s1",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v2": "op1.reg1",
+            "imm_hi_imm_lo": "op1.num1",
+            "reg_v1": "op2.reg1"
+          }
+        }
+      }
+    },
+    "ZLEA": {
+      "sem": "set(reg_v1, ea(2))",
+      "forms": {
+        "reg, [reg + imm]": {
+          "size": 4,
+          "fields": [
+            "ZLEA",
+            "mode_hi_10",
+            "mode_lo_0",
+            "s0",
+            "reg_v1",
+            "reg_v2",
+            "imm_hi_imm_lo"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "reg_v2": "op2.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        },
+        "reg, [imm]": {
+          "size": 4,
+          "fields": [
+            "ZLEA",
+            "mode_hi_01",
+            "mode_lo_1",
+            "s0",
+            "reg_v1",
+            "imm_hi_imm_lo"
+          ],
+          "unused": [
+            "13-11"
+          ],
+          "from": {
+            "reg_v1": "op1.reg1",
+            "imm_hi_imm_lo": "op2.num1"
+          }
+        }
+      }
+    },
+    "ZHALT": {
+      "sem": "halt()",
+      "forms": {
+        "": {
+          "size": 2,
+          "fields": [
+            "ZHALT"
+          ],
+          "unused": [
+            "15-8",
+            "1-0"
+          ]
+        }
+      }
+    },
+    "ZPEEK": {
+      "operands": "rd:reg, rs:reg, off:imm",
+      "becomes": "ZMV rd, [rs + off]"
+    },
+    "ZPOKE": {
+      "operands": "dst:[reg + imm], rs:reg",
+      "becomes": "ZST dst, rs"
+    }
+  },
+  "operandSemantics": {
+    "[[reg + imm]]": {
+      "ea": "load.u16(add(reg1, num1))"
     }
   }
 }

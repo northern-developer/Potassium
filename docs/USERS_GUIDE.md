@@ -215,6 +215,70 @@ each a real instruction set in mode sets, and
 `tests/fixtures/family-cpu.json`, a small invented one. Modes, patterns,
 `modeFrom` and the rest are in SPEC §6.5 and §6.6.
 
+### Saying what instructions do: semantics
+
+The assembler needs only encodings, but an emulator, a compiler and a
+debugger need to know what each instruction does. That is its `sem`,
+in micro-ops (SPEC §6.9), and it is checked when the file loads. A
+worked example, OR1K's adds and branches, with its flags on the
+register list:
+
+```json
+"registers": {
+  "r0": { "number": 0, "const": 0 },
+  "SR": { "space": "spr", "index": 17, "role": "flags", "flags": { "F": 9, "CY": 10, "OV": 11 } }
+},
+"modeSets": {
+  "sf": { ..., "sem": "set(F, setcc(rA, rB, {cc}))" },
+  "n":  { ..., "delaySlot": 1 }
+},
+"instructions": {
+  "l.add":   { "modeSet": "alu", ..., "sem": "set(rD, add(rA, rB)); set(CY, uaddo(rA, rB)); set(OV, saddo(rA, rB))" },
+  "l.sfltu": { "modeSet": "sf", ..., "semArgs": { "cc": "ult" } },
+  "l.bf":    { "modeSet": "n", ..., "sem": "if(F, set(PC, n26))" },
+  "l.jal":   { "modeSet": "n", ..., "sem": "set(R9, pc.next); set(PC, n26)" }
+}
+```
+
+1. **Name what the semantics use**: each operand by its field (`rD`,
+   `n26`; a pc-relative field is the target address), fixed state by
+   its register-list name (`R9`, a flag `CY`), the instruction's own
+   address `PC`, the next one `pc.next` (after a delay slot: `l.jal`
+   links PC + 8).
+2. **Every operation is a call**, `name(...)` or `name.width(...)`
+   (`load.u16`, `store.8`, `sext.8`). `set(X, v)` writes; `if(c, ...)`
+   guards only a write to `PC`, a store or a trap; a conditional value
+   is `select(c, a, b)`.
+3. **Every read sees the state before the instruction**, so the flags
+   above use `rA` and `rB` as they were, whatever the order.
+4. **Shared shapes**: a mode set's `sem` with `{placeholders}` is filled
+   by each instruction's `semArgs` (`l.sfltu`), or name a `semSets`
+   entry.
+5. **Operands with several addressing modes** (MSP430, x86): `$n` and
+   `ea(n)` are operand n's value and address in whatever mode the form
+   has, so one `sem` serves every form, `set(rd, $2)`; the plain modes
+   are worked out, others written in `operandSemantics` (SPEC §6.9;
+   TESTCPU-0's `ZMV` is the example).
+6. **What isn't plain arithmetic**: a carry is named for what it is
+   (`usubo` the borrow, `ncarry.sub` NOT borrow); an operation only
+   defined for some inputs (`shl` by less than the width, `udiv` by
+   non-zero) gets a `select` or a mask around it where the CPU defines
+   the rest; anything the micro-ops can't say is a `helper`, declared
+   with what it reads and writes.
+
+Then: `ptasm -I --semantics -m CPU` shows each form's semantics and
+what ptasm works out from them (registers read and written, operand
+roles, call, branch or jump, loads and stores, commutativity);
+`tests/semantics/ptsem.py` runs programs from them; and
+`tests/semantics/qemu_check.py` checks those programs against QEMU,
+where the CPU has a QEMU target.
+
+**Pseudo-instructions** are written as what they assemble to (SPEC
+§6.11): `"MV": { "operands": "rd:reg, rs:reg", "becomes": "ADDI rd, rs, 0" }`.
+
+**The calling convention** goes in the `abi` block (SPEC §6.10);
+`tests/abi/check-abi.py` checks it against the CPU's GCC.
+
 ## Building on another machine file
 
 When a CPU extends another, its machine file can include the other's

@@ -4,6 +4,8 @@
 #include "ptasm/cpu/Machine.h"
 #include "ptasm/cpu/MachineFile.h"
 #include "ptasm/cpu/Problems.h"
+#include "ptasm/cpu/Semantics.h"
+#include "ptasm/cpu/Abi.h"
 
 #include <nlohmann/json.hpp>
 
@@ -214,11 +216,35 @@ bool isNumberedName(const std::string& name) {
            std::ranges::all_of(name.substr(1), [](char digit) { return digit >= '0' && digit <= '9'; });
 }
 
+// A flags register's "flags": each flag by its bit.
+void readFlags(const nlohmann::json& value, Register& entry, const std::string& context, Problems& problems) {
+    if (!value.contains("flags")) {
+        return;
+    }
+    if (!value.at("flags").is_object()) {
+        problems.push_back(context + R"(: "flags" must be an object: each flag by its bit)");
+        return;
+    }
+    for (const auto& [flag, bit] : value.at("flags").items()) {
+        if (bit.is_number_integer() && bit.get<int64_t>() >= 0 && bit.get<int64_t>() < kMaxAddressBits) {
+            entry.flags[flag] = bit.get<int>();
+        } else {
+            std::string message = context;
+            message += ": flag '";
+            message += flag;
+            message += "' must be a bit number, 0 to 63";
+            problems.push_back(message);
+        }
+    }
+}
+
 // The long form's keys, each read into `entry`.
 void readRegisterObject(const nlohmann::json& value, Register& entry, const std::string& context,
                         Problems& problems) {
-    reportUnknownKeys(value, {"number", "bits", "role", "const", "space", "index", "parent", "lsb", "writes", "alias"},
+    reportUnknownKeys(value,
+                      {"number", "bits", "role", "const", "space", "index", "parent", "lsb", "writes", "alias", "flags"},
                       context, problems);
+    readFlags(value, entry, context, problems);
     if (value.contains("number")) {
         int number = 0;
         readInt(value, "number", number, context, problems);
@@ -267,8 +293,10 @@ void checkRegister(const Register& entry, const Description& description, const 
     static const std::set<std::string> kRoles = {"pc", "sp", "link", "flags"};
     if (!isRegisterName(entry.name)) {
         problems.push_back(context + ": a register's name is a letter, then letters, digits and '_'");
-    } else if (isNumberedName(entry.name)) {
-        problems.push_back(context + ": R<n> already names general register n on every CPU");
+    } else if (isNumberedName(entry.name) &&
+               !(entry.number && std::to_string(*entry.number) == entry.name.substr(1) && entry.alias.empty())) {
+        problems.push_back(context + ": R<n> already names general register n on every CPU; an entry named R<n> "
+                                     "may only describe register n");
     } else if (upperCase(entry.name) == "PC" && entry.role != "pc" && entry.alias.empty()) {
         problems.push_back(context + R"(: "PC" is the program counter on every CPU; give it "role": "pc")");
     }
@@ -293,6 +321,41 @@ void checkRegister(const Register& entry, const Description& description, const 
     }
     if (entry.parent.empty() != (entry.writes == Writes::none)) {
         problems.push_back(context + R"(: "parent" and "writes" go together)");
+    }
+    int const width = entry.bits > 0 ? entry.bits : description.regBits;
+    for (const auto& [flag, bit] : entry.flags) {
+        std::string message = context;
+        message += ": flag '";
+        message += flag;
+        if (!isRegisterName(flag)) {
+            problems.push_back(message + "': a flag's name is a letter, then letters, digits and '_'");
+        } else if (width > 0 && bit >= width) {
+            message += "' is bit " + std::to_string(bit);
+            problems.push_back(message + ", outside its " + std::to_string(width) + " bits");
+        }
+    }
+}
+
+// Each flag's name is no register's, and no other flag's.
+void checkFlagNames(const std::vector<Register>& registers, const std::map<std::string, size_t>& byName,
+                    Problems& problems) {
+    std::map<std::string, std::string> flagOwner;
+    for (const Register& entry : registers) {
+        if (!entry.alias.empty()) {
+            continue;
+        }
+        ProblemsAt const scope(problems, (nlohmann::json::json_pointer() / "registers" / entry.name).to_string());
+        for (const auto& [flag, bit] : entry.flags) {
+            std::string const key = upperCase(flag);
+            std::string message = "register '" + entry.name;
+            message += "': flag '";
+            message += flag;
+            if (byName.contains(key)) {
+                problems.push_back(message + "' is also a register's name");
+            } else if (auto const [owner, added] = flagOwner.emplace(key, entry.name); !added) {
+                problems.push_back(message + "' is also a flag of " + owner->second);
+            }
+        }
     }
 }
 
@@ -328,6 +391,7 @@ void linkRegisters(std::vector<Register>& registers, Problems& problems) {
             entry.alias = alias;
         }
     }
+    checkFlagNames(registers, byName, problems);
     for (const Register& entry : registers) {
         if (entry.parent.empty() || !entry.alias.empty()) {
             continue;
@@ -371,13 +435,57 @@ void readRegisters(const nlohmann::json& json, Machine& machine, Problems& probl
     linkRegisters(machine.registers, problems);
 }
 
+// "helpers": each helper the semantics call, with what it reads and
+// writes (plan 0.2:E5.T1).
+void readHelpers(const nlohmann::json& json, Machine& machine, Problems& problems) {
+    if (!json.contains("helpers")) {
+        return;
+    }
+    ProblemsAt const scope(problems, "/helpers");
+    if (!json.at("helpers").is_object()) {
+        problems.emplace_back(R"("helpers" must be an object: each helper by its name)");
+        return;
+    }
+    auto const names = [&](const nlohmann::json& value, const char* key, std::vector<std::string>& out,
+                           const std::string& context) {
+        if (!value.contains(key) || !value.at(key).is_array() ||
+            !std::ranges::all_of(value.at(key), [](const nlohmann::json& name) { return name.is_string(); })) {
+            problems.push_back(context + ": \"" + key + "\" must list what it " +
+                               (std::string(key) == "uses" ? "reads" : "writes") + " (a list of names, maybe empty)");
+            return;
+        }
+        for (const nlohmann::json& name : value.at(key)) {
+            out.push_back(name.get<std::string>());
+        }
+    };
+    for (const auto& [name, value] : json.at("helpers").items()) {
+        std::string const context = "helper '" + name + "'";
+        if (!value.is_object()) {
+            problems.push_back(context + R"(: must be an object with "uses", "defs" and "sideEffects")");
+            continue;
+        }
+        reportUnknownKeys(value, {"uses", "defs", "sideEffects"}, context, problems);
+        Helper helper;
+        names(value, "uses", helper.uses, context);
+        names(value, "defs", helper.defs, context);
+        if (value.contains("sideEffects") && !value.at("sideEffects").is_boolean()) {
+            problems.push_back(context + R"(: "sideEffects" must be true or false)");
+        } else {
+            helper.sideEffects = value.value("sideEffects", false);
+        }
+        machine.helpers[name] = std::move(helper);
+    }
+}
+
 // The top-level keys: cpuName and maxOperands; the rest are read by
 // readDescription, readElf and InstructionSet::load. "$schema" points an
 // editor at machines/cpu_schema.json; ptasm only checks it's a string.
 void readHeader(const nlohmann::json& json, Machine& machine, int& maxOperands, Problems& problems) {
-    static const std::set<std::string> kKnownKeys = {"$schema", "cpuName",     "maxOperands", "description",
-                                                     "elf",     "registers",   "fields",      "formats",
-                                                     "modes",   "operandSets", "modeSets",    "instructions"};
+    static const std::set<std::string> kKnownKeys = {"$schema",  "cpuName",     "maxOperands", "description",
+                                                     "elf",      "registers",   "fields",      "formats",
+                                                     "modes",    "operandSets", "modeSets",    "instructions",
+                                                     "semSets",  "helpers",     "abi",
+                                                     "operandSemantics"};
     for (const auto& [key, value] : json.items()) {
         if (!kKnownKeys.contains(key)) {
             ProblemsAt const scope(problems, (nlohmann::json::json_pointer() / key).to_string());
@@ -418,7 +526,19 @@ struct CpuLoader {
             readElf(json, loaded.machine, problems);
         }
         readRegisters(json, loaded.machine, problems);
-        loaded.cpu.instructions.load(json, problems);
+        readHelpers(json, loaded.machine, problems);
+        std::string link;
+        if (json.contains("abi") && json.at("abi").is_object() && json.at("abi").contains("link") &&
+            json.at("abi").at("link").is_string()) {
+            link = json.at("abi").at("link").get<std::string>();
+        }
+        ptasm::SemanticsScope const names{.registers = &loaded.machine.registers,
+                                          .helpers = &loaded.machine.helpers,
+                                          .regCount = loaded.machine.description.regCount,
+                                          .link = link,
+                                          .regBits = loaded.machine.description.regBits};
+        loaded.cpu.instructions.load(json, problems, &names);
+        ptasm::readAbi(json, loaded.machine, loaded.cpu.instructions, problems);
         std::string const pcrelField = loaded.cpu.instructions.fieldOfKind(ptasm::Build::pcrel);
         if (!pcrelField.empty() && loaded.machine.description.relOffset == RelOffset::none &&
             !(json.contains("description") && json.at("description").contains("relOffset"))) {

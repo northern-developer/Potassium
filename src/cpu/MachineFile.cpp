@@ -330,12 +330,27 @@ void Merger::checkOverlap(const Json& own, const Json& changes, // NOLINT(bugpro
     }
 }
 
+// An instruction's "target", "commutes" or "sideEffects": facts the
+// semantics work out, so "replace" may give them though nothing wrote
+// them.
+bool isWorkedOutFact(const Pointer& place, const std::string& key) {
+    static const std::set<std::string> kFacts = {"target", "commutes", "sideEffects"};
+    return kFacts.contains(key) && !place.empty() && place.parent_pointer() == Pointer("/instructions");
+}
+
 // "replace": changes what the includes gave; null removes a key.
 void Merger::applyReplace(Json& base, const Json& changes, const Pointer& place, Merged& result,
                           const std::string& shownPath) {
     for (const auto& [key, value] : changes.items()) {
         Pointer const where = place / key;
-        if (!base.contains(key)) {
+        if (!base.contains(key) && isWorkedOutFact(place, key)) {
+            // A fact the semantics work out: kept apart, so the loader
+            // knows it was written as an override (plan 0.2:E5.T1).
+            base["replace"][key] = value;
+            markOrigin(value, place / "replace" / key, writer(result, Pointer() / "replace" / where, shownPath),
+                       result.origin);
+            record(result, where, value, writer(result, Pointer() / "replace" / where, shownPath), "changed");
+        } else if (!base.contains(key)) {
             problem(named(where) + (value.is_null() ? " isn't inherited, so there's nothing to remove"
                                                     : R"( isn't inherited, so there's nothing to replace; write it outside "replace")"),
                     shownPath);
@@ -449,8 +464,9 @@ void Merger::collectModel(const Json& models, const std::string& name, std::vect
 // What a model may hold: the instruction set's parts, its bases and its
 // own "replace". The rest (cpuName, description, elf) is the file's.
 void Merger::applyModel(Merged& result, const std::string& name, const Json& model, const std::string& shownPath) {
-    static const std::set<std::string> kAllowed = {"base",        "replace",  "registers",   "fields", "formats",
-                                                   "modes",       "operandSets", "modeSets", "instructions"};
+    static const std::set<std::string> kAllowed = {"base",  "replace",     "registers", "fields",       "formats",
+                                                   "modes", "operandSets", "modeSets",  "instructions", "semSets",
+                                                   "helpers", "operandSemantics"};
     if (!model.is_object()) {
         problem("model '" + name + "' must be an object, shaped like the file", shownPath);
         return;

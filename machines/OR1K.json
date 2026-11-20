@@ -16,6 +16,37 @@
       "addr32": 1
     }
   },
+  "registers": {
+    "r0": { "number": 0, "const": 0 },
+    "SR": { "space": "spr", "index": 17, "bits": 32, "role": "flags", "flags": { "F": 9, "CY": 10, "OV": 11 } },
+    "EPCR": { "space": "spr", "index": 32, "bits": 32 },
+    "ESR": { "space": "spr", "index": 64, "bits": 32 }
+  },
+  "helpers": {
+    "mfspr": { "uses": ["rA"], "defs": ["rD"], "sideEffects": true },
+    "mtspr": { "uses": ["rA", "rB"], "defs": [], "sideEffects": true }
+  },
+  "abi": {
+    "stack": { "register": "R1", "grows": "down", "align": 4, "redZone": 128 },
+    "link": "R9",
+    "frame": { "register": "R2", "order": ["lr", "fp", "calleeSaved", "locals", "outgoing"],
+               "calleeSaved": "ascending", "points": "cfa" },
+    "threadPointer": "R10",
+    "got": "R16",
+    "args": { "registers": ["R3", "R4", "R5", "R6", "R7", "R8"],
+              "pair": "consecutive", "splitPair": false, "variadic": "stack", "aggregates": "reference" },
+    "returns": { "registers": ["R11", "R12"], "sret": { "pointer": "R3", "returned": "R11" } },
+    "calleeSaved": ["R1", "R2", "R9", "R10", "R14", "R16", "R18", "R20", "R22", "R24", "R26", "R28", "R30"],
+    "eh": { "dataRegs": ["R25", "R27", "R29", "R31"] },
+    "vaList": "pointer",
+    "types": {
+      "char": { "size": 1, "signed": true }, "short": { "size": 2 }, "int": { "size": 4 }, "long": { "size": 4 },
+      "longLong": { "size": 8, "align": 4 }, "pointer": { "size": 4 }, "float": { "size": 4 },
+      "double": { "size": 8, "align": 4 }, "longDouble": { "size": 8, "align": 4 },
+      "sizeT": "unsigned int", "wcharT": "unsigned int"
+    },
+    "breakpoint": "l.trap"
+  },
   "fields": {
     "opcode": {
       "build": "set",
@@ -130,7 +161,6 @@
     },
     "n26": {
       "build": "pcrel",
-      "target": "jump",
       "bits": 26,
       "lsb": 0,
       "valueLsb": 2,
@@ -238,6 +268,7 @@
   },
   "modeSets": {
     "alu": {
+      "sem": "set(rD, {op}(rA, rB))",
       "formats": {
         "default": "alu"
       },
@@ -291,6 +322,7 @@
       }
     },
     "shift": {
+      "sem": "set(rD, {op}(rA, and(shift_l, 31)))",
       "formats": {
         "default": "shift"
       },
@@ -308,6 +340,7 @@
       }
     },
     "sf": {
+      "sem": "set(F, setcc(rA, rB, {cc}))",
       "formats": {
         "default": "sf"
       },
@@ -322,6 +355,7 @@
       }
     },
     "load": {
+      "sem": "set(rD, load.{w}(add(rA, imm16)))",
       "formats": {
         "default": "imm"
       },
@@ -338,6 +372,7 @@
       }
     },
     "store": {
+      "sem": "store.{w}(add(rA, store_imm), rB)",
       "formats": {
         "default": "store"
       },
@@ -354,6 +389,7 @@
       }
     },
     "n": {
+      "delaySlot": 1,
       "formats": {
         "default": "n"
       },
@@ -365,6 +401,7 @@
       }
     },
     "jr": {
+      "delaySlot": 1,
       "formats": {
         "default": "jr"
       },
@@ -378,6 +415,7 @@
   },
   "instructions": {
     "l.and": {
+      "semArgs": { "op": "and" },
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -385,6 +423,7 @@
       }
     },
     "l.or": {
+      "semArgs": { "op": "or" },
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -392,72 +431,84 @@
       }
     },
     "l.addi": {
+      "sem": "set(rD, add(rA, imm16)); set(CY, uaddo(rA, imm16)); set(OV, saddo(rA, imm16))",
       "modeSet": "imm",
       "set": {
         "opcode": "0x27"
       }
     },
     "l.xori": {
+      "sem": "set(rD, xor(rA, imm16))",
       "modeSet": "imm",
       "set": {
         "opcode": "0x2b"
       }
     },
     "l.ori": {
+      "sem": "set(rD, or(rA, k16))",
       "modeSet": "k",
       "set": {
         "opcode": "0x2a"
       }
     },
     "l.sfne": {
+      "semArgs": { "cc": "ne" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x721"
       }
     },
     "l.sfges": {
+      "semArgs": { "cc": "ge" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x72b"
       }
     },
     "l.lwz": {
+      "semArgs": { "w": "u32" },
       "modeSet": "load",
       "set": {
         "opcode": "0x21"
       }
     },
     "l.sw": {
+      "semArgs": { "w": "32" },
       "modeSet": "store",
       "set": {
         "opcode": "0x35"
       }
     },
     "l.j": {
+      "sem": "set(PC, n26)",
       "modeSet": "n",
       "set": {
         "opcode": "0x00"
       }
     },
     "l.jal": {
+      "sem": "set(R9, pc.next); set(PC, n26)",
       "modeSet": "n",
       "set": {
         "opcode": "0x01"
       }
     },
     "l.bnf": {
+      "sem": "if(zero(F), set(PC, n26))",
       "modeSet": "n",
       "set": {
         "opcode": "0x03"
       }
     },
     "l.bf": {
+      "sem": "if(F, set(PC, n26))",
       "modeSet": "n",
       "set": {
         "opcode": "0x04"
       }
     },
     "l.jr": {
+      "sem": "set(PC, rB)",
       "modeSet": "jr",
       "set": {
         "opcode": "0x11"
@@ -466,6 +517,7 @@
     "l.movhi": {
       "forms": {
         "reg, imm": {
+          "sem": "set(rD, shl(movhi_k, 16))",
           "size": 4,
           "fields": [
             "opcode",
@@ -485,6 +537,7 @@
           }
         },
         "reg, hi(imm|local|reloc)": {
+          "sem": "set(rD, hi16)",
           "size": 4,
           "fields": [
             "opcode",
@@ -504,6 +557,7 @@
           }
         },
         "reg, ha(imm|local|reloc)": {
+          "sem": "set(rD, ha16)",
           "size": 4,
           "fields": [
             "opcode",
@@ -525,6 +579,7 @@
       }
     },
     "l.nop": {
+      "sem": "",
       "forms": {
         "": {
           "bytes": "0x15 0x00 0x00 0x00"
@@ -548,6 +603,7 @@
       }
     },
     "l.sys": {
+      "sem": "trap(syscall, k16_plain)",
       "forms": {
         "imm": {
           "size": 4,
@@ -564,7 +620,26 @@
         }
       }
     },
+    "l.trap": {
+      "sem": "trap(breakpoint, k16_plain)",
+      "forms": {
+        "imm": {
+          "size": 4,
+          "fields": [
+            "top16",
+            "k16_plain"
+          ],
+          "set": {
+            "top16": "0x2100"
+          },
+          "from": {
+            "k16_plain": "op1.num1"
+          }
+        }
+      }
+    },
     "l.add": {
+      "sem": "set(rD, add(rA, rB)); set(CY, uaddo(rA, rB)); set(OV, saddo(rA, rB))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -572,6 +647,7 @@
       }
     },
     "l.addc": {
+      "sem": "set(rD, add(add(rA, rB), CY)); set(CY, uaddo_carry(rA, rB, CY)); set(OV, saddo_carry(rA, rB, CY))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -579,6 +655,7 @@
       }
     },
     "l.sub": {
+      "sem": "set(rD, sub(rA, rB)); set(CY, usubo(rA, rB)); set(OV, ssubo(rA, rB))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -586,6 +663,7 @@
       }
     },
     "l.xor": {
+      "semArgs": { "op": "xor" },
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -593,6 +671,7 @@
       }
     },
     "l.sll": {
+      "sem": "set(rD, shl(rA, and(rB, 31)))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -600,6 +679,7 @@
       }
     },
     "l.srl": {
+      "sem": "set(rD, srl(rA, and(rB, 31)))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -607,6 +687,7 @@
       }
     },
     "l.sra": {
+      "sem": "set(rD, sra(rA, and(rB, 31)))",
       "modeSet": "alu",
       "set": {
         "opcode": "0x38",
@@ -614,66 +695,77 @@
       }
     },
     "l.addic": {
+      "sem": "set(rD, add(add(rA, imm16), CY)); set(CY, uaddo_carry(rA, imm16, CY)); set(OV, saddo_carry(rA, imm16, CY))",
       "modeSet": "imm",
       "set": {
         "opcode": "0x28"
       }
     },
     "l.andi": {
+      "sem": "set(rD, and(rA, k16))",
       "modeSet": "k",
       "set": {
         "opcode": "0x29"
       }
     },
     "l.sfeq": {
+      "semArgs": { "cc": "eq" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x720"
       }
     },
     "l.sfgtu": {
+      "semArgs": { "cc": "ugt" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x722"
       }
     },
     "l.sfgeu": {
+      "semArgs": { "cc": "uge" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x723"
       }
     },
     "l.sfltu": {
+      "semArgs": { "cc": "ult" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x724"
       }
     },
     "l.sfleu": {
+      "semArgs": { "cc": "ule" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x725"
       }
     },
     "l.sfgts": {
+      "semArgs": { "cc": "gt" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x72a"
       }
     },
     "l.sflts": {
+      "semArgs": { "cc": "lt" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x72c"
       }
     },
     "l.sfles": {
+      "semArgs": { "cc": "le" },
       "modeSet": "sf",
       "set": {
         "sf_op": "0x72d"
       }
     },
     "l.slli": {
+      "semArgs": { "op": "shl" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x2e",
@@ -681,6 +773,7 @@
       }
     },
     "l.srli": {
+      "semArgs": { "op": "srl" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x2e",
@@ -688,6 +781,7 @@
       }
     },
     "l.srai": {
+      "semArgs": { "op": "sra" },
       "modeSet": "shift",
       "set": {
         "opcode": "0x2e",
@@ -695,54 +789,63 @@
       }
     },
     "l.lws": {
+      "semArgs": { "w": "s32" },
       "modeSet": "load",
       "set": {
         "opcode": "0x22"
       }
     },
     "l.lbz": {
+      "semArgs": { "w": "u8" },
       "modeSet": "load",
       "set": {
         "opcode": "0x23"
       }
     },
     "l.lbs": {
+      "semArgs": { "w": "s8" },
       "modeSet": "load",
       "set": {
         "opcode": "0x24"
       }
     },
     "l.lhz": {
+      "semArgs": { "w": "u16" },
       "modeSet": "load",
       "set": {
         "opcode": "0x25"
       }
     },
     "l.lhs": {
+      "semArgs": { "w": "s16" },
       "modeSet": "load",
       "set": {
         "opcode": "0x26"
       }
     },
     "l.sb": {
+      "semArgs": { "w": "8" },
       "modeSet": "store",
       "set": {
         "opcode": "0x36"
       }
     },
     "l.sh": {
+      "semArgs": { "w": "16" },
       "modeSet": "store",
       "set": {
         "opcode": "0x37"
       }
     },
     "l.jalr": {
+      "sem": "set(R9, pc.next); set(PC, rB)",
       "modeSet": "jr",
       "set": {
         "opcode": "0x12"
       }
     },
     "l.mfspr": {
+      "sem": "helper(mfspr, rA, k16_plain)",
       "forms": {
         "reg, reg, imm": {
           "size": 4,
@@ -764,6 +867,7 @@
       }
     },
     "l.mtspr": {
+      "sem": "helper(mtspr, rA, rB, mtspr_k)",
       "forms": {
         "reg, reg, imm": {
           "size": 4,
@@ -785,6 +889,7 @@
       }
     },
     "l.rfe": {
+      "sem": "set(PC, EPCR); set(SR, ESR)",
       "forms": {
         "": {
           "bytes": "0x24 0x00 0x00 0x00"

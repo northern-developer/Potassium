@@ -1,4 +1,4 @@
-CPU: 'TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm) eMachine:0' supporting 62 instruction forms.
+CPU: 'TESTCPU-0 (coverage fixture -- not a real CPU, see examples/TESTCPU-0.asm) eMachine:0' supporting 74 instruction forms.
 ORG set to: 0 + 
 #AAA                               -- 0 operands
 

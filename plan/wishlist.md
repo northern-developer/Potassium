@@ -26,6 +26,14 @@ when it moves into an Epic.
 - **SPARC-class features** (from the survey of existing CPUs,
   2026-11-17): register windows, and delayed writes to state registers
   (hazard NOPs). No assembler effect; for an emulator of such a CPU.
+- **Reserved bits that must be zero, and bits that don't matter**
+  (2026-11-19): `unused` says only that a bit isn't a field. Encoding
+  writes 0 either way, but a decoder must match a must-be-zero bit and
+  ignore a don't-care one (QEMU's decodetree `0` and `-`; TableGen's
+  `Inst{n} = 0` and `?`), each range classified from the CPU's
+  machine-code table. Literal `bytes` forms hide this too (RV32I's
+  `ECALL`, `EBREAK`, `FENCE`). E5.T1's tester decodes `unused` as
+  don't-care; a generated QEMU decoder needs the split.
 - **Later vocabularies and models**: floating point, SMP, OR1K's MAC
   family, scheduling models for a compiler.
 - **Equivalent encodings**: `becomes` on an

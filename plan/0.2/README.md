@@ -1,7 +1,6 @@
 # ptasm 0.2
 
-**Status:** Assigned -- the current release since 0.1.3 (published
-2026-11-17); 0.2.1 is the base. Its Epics may move into later V.Rs.
+**Status:** In progress -- 0.2.2 published (2026-11-20). Its Epics may move into later V.Rs.
 
 The machine file and the assembler: the machine file in layers, with
 semantics and one grammar for its small languages; CPU-specific
@@ -22,7 +21,7 @@ there.
 | **E7** | [LLVM](E07-llvm.md) | Dropped (2026-11-17) -- moved to 0.4:E1, when 0.2 was split. |
 | **E8** | [Fuzzing](E08-fuzzing.md) | In progress -- T1 and A1-A2 completed for 0.1.2; A3 later. |
 | **E9** | [Test depth](E09-test-depth.md) | Assigned (2026-11-12) |
-| **E10** | [Documentation](E10-documentation.md) | Assigned (2026-11-12) |
+| **E10** | [Documentation](E10-documentation.md) | Dropped (2026-11-19) -- moved to 0.6:E1, the documentation release. |
 | **E11** | [Renode](E11-renode.md) | Completed (0.1.3) -- T1; the rest moved to 0.3:E2 (2026-11-17). |
 | **E12** | [Linking](E12-linking.md) | Assigned -- worked on as it is needed, its discussions and its implementation alike. |
 <!-- plan:end -->
@@ -40,15 +39,16 @@ The order follows the dependencies: the machine file's cpu layer
   the machine file's grammar; E1.T1, the register list and register
   names in source; E4.T2. Every shipped target loads under the new
   format with identical output, and register names work in source.
-- **0.2.2, semantics**: E5.T1 (its vocabulary, the ABI, `becomes`, the
-  facts worked out from the semantics, the Python tester, checked under
-  QEMU); E5.A1's machine-file part. Done when RV32I and OR1K have full
-  semantics, checked against QEMU.
+- **0.2.2, semantics** (published 2026-11-20): E5.T1 (its vocabulary,
+  the ABI, `becomes`, the facts worked out from the semantics, the
+  Python tester, checked under QEMU); E5.A1's machine-file part. RV32I
+  and OR1K have full semantics, checked against QEMU; operands with
+  several addressing modes (`$n`, `ea(n)`) came forward from a later
+  Addendum.
 - **0.2.3, compiler input**: E1.T2, E2.T1 and E2's Addenda, E4.A9; at
   the end, once the command line settles, E4.A8 (the man page). Done
   when clang's AMD64 output assembles unmodified and matches GAS.
 
-Alongside, as each allows: E10's documentation once 0.2.1's schema
-stands, E8.A3 after 0.2.1, E3's Addenda as a release needs them (E3.A6
-with 0.2.3).
+Alongside, as each allows: E8.A3 after 0.2.1, E3's Addenda as a
+release needs them (E3.A6 with 0.2.3). The documentation pass is 0.6's.
 

@@ -23,16 +23,27 @@ is also checked byte for byte against GNU as (`isa-or1k`).
 
 ## 2. Machine
 
-32 registers, `r0`-`r31`. `r0` is wired to zero by convention; ptasm
-doesn't treat it specially. `r1` is the stack pointer, `r9` the link
+32 registers, `r0`-`r31`. `r0` is wired to zero: its register-list
+entry has `"const": 0`, which the semantics use; the assembler treats
+it like any register. `r1` is the stack pointer, `r9` the link
 register, and `r3`-`r8` the arguments, with the result in `r11`.
 32-bit addresses, **big-endian**, 32-bit instructions. `relOffset` is
 `"before"`: a jump or branch offset counts from the instruction itself,
 in words (`valueLsb: 2`).
 
-`l.j`, `l.jal`, `l.jr`, `l.jalr`, `l.bf` and `l.bnf` have a delay slot:
-the next instruction runs before the jump takes effect. ptasm encodes the
-slot's instruction like any other; the source places it, as GCC does.
+`l.j`, `l.jal`, `l.jr`, `l.jalr`, `l.bf` and `l.bnf` have a delay slot
+(`"delaySlot": 1` on their mode sets `n` and `jr`): the next
+instruction runs before the jump takes effect, and `l.jal`/`l.jalr`
+link the address after it, PC + 8. ptasm encodes the slot's
+instruction like any other; the source places it, as GCC does.
+
+**Semantics** (plan 0.2:E5.T1): every instruction has them. The
+register list adds the special registers they name: `SR` (special
+register 17, with its flags `F` 9, `CY` 10 and `OV` 11), `EPCR` (32)
+and `ESR` (64), for `l.rfe`. The carry after `l.sub` is the borrow, as
+the spec says. `l.mfspr` and `l.mtspr`, whose register is computed at
+run time, are the helpers `mfspr` and `mtspr`. `l.trap` is the `abi`
+block's breakpoint.
 
 ELF: `ELFCLASS32`, `ELFDATA2MSB`, `e_machine` 92 (`EM_OPENRISC`),
 `e_flags` 0, RELA. Each relocated field names its own type, and the
@@ -107,6 +118,12 @@ sign-extended, so it pairs with `hi`.
   mechanical memory-operand rewrite. The `.text` bytes must be identical.
 - `test_elf.cpp` reads a big-endian object field by field: the header,
   section headers and a RELA entry.
+- `ctest`'s `semantics-or1k`: the programs in `tests/semantics/or1k/`
+  run from OR1K's micro-ops, delay slots and flags included, and meet
+  their `; expect:` lines; `semantics-or1k-fail`'s must fail.
+  `l.sys`, `l.rfe` and the SPR moves aren't run: they need a trap
+  handler and the helpers.
+- `ctest`'s `abi-or1k`: the `abi` block against `or1k-elf-gcc`.
 
 `isa-or1k` needs `or1k-elf-as` and `or1k-elf-objcopy`. The link test
 is registered only when `or1k-elf-gcc`, `or1k-elf-ld` and `qemu-or1k`

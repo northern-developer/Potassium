@@ -29,7 +29,9 @@ struct Options {
 	DiagnosticsFormat diagnosticsFormat = DiagnosticsFormat::text;
 	bool isa = false;
 	bool origins = false;     // -I --origins: where each instruction was defined and changed
+	bool semantics = false;   // -I --semantics: each form's semantics and worked-out facts
 	bool dumpMachine = false; // --dump-machine: the machine file as loaded, as JSON
+	bool dumpForms = false;   // --dump-forms: every form as expanded, as JSON
 	bool pad = false;
 	bool debug = false; // -g
 	// --defsym NAME=value, in the order given.

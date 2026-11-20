@@ -20,6 +20,12 @@ S-records or an ELF object you can link with standard tools.
 - No silent errors: a value that doesn't fit, an address out of range or
   an encoding the format can't hold is an error, with its line, as
   GCC-style text, JSON or SARIF (`--diagnostics-format`).
+- What instructions do, in the machine file: semantics in micro-ops,
+  checked when it loads, with what's worked out from them (registers
+  read and written, call or branch, loads and stores); a calling
+  convention; pseudo-instructions written as what they assemble to.
+  RV32I's and OpenRISC's are run by a tester and checked against QEMU,
+  their calling conventions against GCC.
 - Targets included: AMD64, i386, MSP430, RV32I and OpenRISC 1000
   (each checked against GNU or LLVM tools), and SAP-1.
 

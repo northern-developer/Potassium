@@ -249,7 +249,9 @@ bool Encoder::writeField(const std::string& name, const ptasm::Encoding& encodin
                                                             " out of range for field '" + name + "'");
                     return false;
                 }
-                recordPcrelRelocation(*arg, field.target, layout,
+                auto const formTarget = encoding.targets.find(name);
+                recordPcrelRelocation(*arg, formTarget != encoding.targets.end() ? formTarget->second : field.target,
+                                      layout,
                                       {.target = target, .pcFromField = pc - line.address - fieldStart}, line);
                 break;
             }
@@ -400,8 +402,10 @@ bool Encoder::feedsBranch(const std::string& mnemonic, const ptasm::Form& form, 
         }
         return std::ranges::any_of(encoding->operandFields, [&](const auto& entry) {
             const ptasm::FieldDef* field = cpu->isa().field(entry.first);
+            auto const target = encoding->targets.find(entry.first);
             return std::cmp_equal(entry.second.position, position) && field != nullptr &&
-                   field->build == ptasm::Build::pcrel && field->target != ptasm::Target::data;
+                   field->build == ptasm::Build::pcrel && target != encoding->targets.end() &&
+                   target->second != ptasm::Target::data;
         });
     }
 

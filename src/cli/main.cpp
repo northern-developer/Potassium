@@ -21,6 +21,7 @@
 #include "ptasm/cli/Cli.h"
 #include "ptasm/assembler/Assembler.h"
 #include "ptasm/cpu/Cpu.h"
+#include "ptasm/cpu/InstructionSet.h"
 #include "ptasm/cpu/Machine.h"
 #include "ptasm/cpu/MachineFile.h"
 #include "ptasm/assembler/Diagnostics.h"
@@ -80,6 +81,61 @@ void printRegisterOrigins(const LoadedCpu& loaded) {
     }
 }
 
+// A form's facts, the empty ones left out.
+nlohmann::json shownFacts(const ptasm::Encoding& encoding) {
+    nlohmann::json facts = factsJson(encoding);
+    for (auto it = facts.begin(); it != facts.end();) {
+        bool const empty = it->is_null() || (it->is_boolean() && !it->get<bool>()) ||
+                           (it->is_string() && it->get<std::string>().empty()) || it->empty();
+        it = empty ? facts.erase(it) : std::next(it);
+    }
+    return facts;
+}
+
+// The operand a "when" tests, with its part: "value", "%lo(value)".
+std::string shownOperand(const ptasm::Pseudo& pseudo, const ptasm::Pseudo::Alternative& alternative) {
+    std::string const& name = pseudo.names[alternative.operand];
+    return alternative.part.empty() ? name : alternative.part + "(" + name + ")";
+}
+
+void printPseudo(const std::string& mnemonic, const ptasm::Pseudo& pseudo) {
+    for (const std::string& form : pseudo.formTexts) {
+        std::cout << mnemonic << (form.empty() ? "" : " ") << form << '\n';
+    }
+    for (const ptasm::Pseudo::Alternative& alternative : pseudo.alternatives) {
+        std::string instructions;
+        for (const std::string& line : alternative.lines) {
+            instructions += instructions.empty() ? "" : "; ";
+            instructions += line;
+        }
+        std::string const when = alternative.test.empty()
+                                     ? std::string()
+                                     : " when " + alternative.test + "(" + shownOperand(pseudo, alternative) + ", " +
+                                           std::to_string(alternative.bits) + ")";
+        std::cout << "  becomes" << when << ": " << instructions << '\n';
+    }
+}
+
+// -I --semantics: every form, then its semantics and the facts worked
+// out from them (or "no semantics"); then the pseudo-instructions.
+void printSemantics(const Cpu& cpu) {
+    for (const std::string& mnemonic : cpu.isa().mnemonics()) {
+        for (const std::string& form : cpu.isa().formsOf(mnemonic)) {
+            const ptasm::Encoding* encoding = cpu.isa().find(mnemonic, form);
+            std::cout << mnemonic << (form.empty() ? "" : " ") << form << '\n';
+            if (encoding == nullptr || !encoding->semantics) {
+                std::cout << "  no semantics\n";
+                continue;
+            }
+            std::cout << "  sem:   " << (encoding->semantics->empty() ? "(nothing)" : *encoding->semantics) << '\n';
+            std::cout << "  facts: " << shownFacts(*encoding).dump() << '\n';
+        }
+    }
+    for (const auto& [mnemonic, pseudo] : cpu.isa().pseudos()) {
+        printPseudo(mnemonic, pseudo);
+    }
+}
+
 // -I --origins: every form, with where its instruction came from; then the
 // instructions a later file or model removed.
 void printOrigins(const LoadedCpu& loaded) {
@@ -129,21 +185,25 @@ int runIsaMode(const Options& options, Diagnostics& diagnostics) {
         diagnostics.printFailureSummary();
         return 1;
     }
-    printCpu(loaded->cpu, loaded->machine, !options.origins);
+    printCpu(loaded->cpu, loaded->machine, !options.origins && !options.semantics);
     if (options.origins) {
         printOrigins(*loaded);
+    }
+    if (options.semantics) {
+        printSemantics(loaded->cpu);
     }
     return 0;
 }
 
-// --dump-machine: the machine file as ptasm loaded and checked it.
+// --dump-machine: the machine file as ptasm loaded and checked it;
+// --dump-forms: its forms as ptasm expanded them.
 int runDumpMachine(const Options& options, Diagnostics& diagnostics) {
     std::optional<LoadedCpu> loaded = loadCpuFile(options.cpuPath, diagnostics);
     if (diagnostics.errorCount() > 0 || !loaded.has_value()) {
         diagnostics.printFailureSummary();
         return 1;
     }
-    std::cout << loaded->json.dump(2) << '\n';
+    std::cout << (options.dumpForms ? formsJson(*loaded) : loaded->json).dump(2) << '\n';
     return 0;
 }
 
@@ -269,7 +329,7 @@ int run(const Options& options, Diagnostics& diagnostics) {
     if (options.isa) {
         return runIsaMode(options, diagnostics);
     }
-    if (options.dumpMachine) {
+    if (options.dumpMachine || options.dumpForms) {
         return runDumpMachine(options, diagnostics);
     }
 

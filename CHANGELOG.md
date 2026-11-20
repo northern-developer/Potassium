@@ -4,6 +4,71 @@ Notable changes to ptasm, newest first. Each release's full plan is in
 `plan/<V.R>/` (`README.md`, then `README-0m.md` for each later release).
 Versions are V.R.m: V.R is a planned release, m its published updates.
 
+## [0.2.2] -- 2026-11-20
+
+### Added
+- **Instruction semantics** in the machine file: `sem` on an
+  instruction, a form or a mode set, in micro-ops
+  (`set(rd, add(rs1, rs2)); if(setcc(rs1, rs2, eq), set(PC, b_off))`);
+  shared ones in `semSets`, filled from `semArgs`; flags on the
+  register list (`"flags": {"C": 0, "Z": 1}`); `helpers` for what the
+  micro-ops can't express. ptasm checks them when it loads the file
+  (each operation, every name, the writes) and keeps them with each
+  form; the assembler's output doesn't change.
+- **The `abi` block**: the calling convention a compiler and a debugger
+  need (stack, link and frame registers, argument and return
+  registers with their pair, variadic and aggregate rules, struct
+  return, callee-saved registers, C types, the breakpoint instruction),
+  checked when the file loads. RV32I and OR1K have one, checked
+  against GCC (ctest label `abi`).
+- **`delaySlot`** on a mode set or an instruction; OR1K's jumps and
+  branches have 1.
+- **RV32I's semantics**, for every instruction, and `x0` in its
+  register list, reading as 0.
+- **OR1K's semantics**, for every instruction, with its delay slots;
+  its register list (`r0` reading as 0; `SR` with the flags `F`, `CY`,
+  `OV`; `EPCR`, `ESR`), the helpers for `l.mfspr`/`l.mtspr`, and
+  `l.trap`, its breakpoint.
+- **MSP430's register list**: `SP`, and `SR` with its flags.
+- A register-list entry may be named `R<n>` when it describes register
+  n itself (`"r0": {"number": 0, "const": 0}`).
+- **`--dump-forms`**: every instruction form as ptasm expanded it, as
+  JSON, with its worked-out facts.
+- **Facts worked out from the semantics**: registers and flags read and
+  written, operand roles, control flow, loads and stores, side effects,
+  commutativity, moves, each pc-relative field's call or jump; shown by
+  `-I --semantics`. An instruction may write `target`, `commutes` or
+  `sideEffects`, agreeing, or override them in `replace`.
+
+- **Pseudo-instructions, `becomes`**: an instruction written as the
+  real instructions it is assembled as, in assembly text, with
+  alternatives by `fits`/`fitsu` chosen in pass 1. RV32I's `MV`, `LI`,
+  `J`, `JR`, `NOP` and `RET` are now written so, with the same bytes;
+  `LI` also takes any 32-bit value as GNU as assembles it: `ADDI`,
+  `LUI` alone (`fitsu(%lo(value), 0)`), or both. A named operand may
+  sit inside a memory operand (`[rs + off]`).
+- **`$n` and `ea(n)`**: an operand's value and address, whatever its
+  addressing mode, so one `sem` serves every form; the plain modes are
+  worked out, others written in `operandSemantics`. TESTCPU-0 gains
+  `ZMV`, `ZST`, `ZLEA`, `ZHALT` and the pseudo-instructions `ZPEEK` and
+  `ZPOKE` to test them, and `description.regBits`.
+
+- **A scaling test** (release tier, `perf-scaling-rv32i`): 4N blocks
+  of code must cost about 4 times N blocks, by callgrind's instruction
+  count, so an accidentally quadratic pass is caught.
+
+### Changed
+- **A pc-relative field's `target` is each form's**: worked out from
+  its semantics where it has them, else the instruction's `target`,
+  else the field's. RV32I's `j_off` and `b_off` and OR1K's `n26` no
+  longer write it; `JAL` and `l.jal` are now calls. Output is
+  unchanged: their fields name their relocation types.
+- **The semantics tester** (`tests/semantics/ptsem.py`, ctest label
+  `semantics`): programs run from a machine file's micro-ops, decoded
+  from ptasm's own forms, checked against their `; expect:` lines; and
+  cross-checked under QEMU (`qemu_check.py`, label `qemu`): RV32I's and
+  OR1K's programs end in the same state in both.
+
 ## [0.2.1] -- 2026-11-18
 
 ### Added

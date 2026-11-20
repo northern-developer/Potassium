@@ -476,7 +476,8 @@ TEST_CASE("Registers: the short and long forms, aliases and parts load; -I shows
 
 TEST_CASE("Registers: every entry's problems are reported") {
     CHECK(anyHas(registerProblems({{"9X", 1}}), "a register's name is a letter, then letters, digits and '_'"));
-    CHECK(anyHas(registerProblems({{"R3", 3}}), "R<n> already names general register n on every CPU"));
+    CHECK(anyHas(registerProblems({{"R3", 4}}), "R<n> already names general register n on every CPU"));
+    CHECK(registerProblems({{"r3", {{"number", 3}, {"const", 0}}}}).empty()); // describes register 3 itself
     CHECK(anyHas(registerProblems({{"PC", 0}}), "\"PC\" is the program counter on every CPU"));
     CHECK(anyHas(registerProblems({{"BIG", 99}}), "number 99 isn't below regCount (16)"));
     CHECK(anyHas(registerProblems({{"X", {{"number", 1}, {"colour", "red"}}}}), "unknown key \"colour\""));

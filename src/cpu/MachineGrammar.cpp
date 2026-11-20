@@ -1,12 +1,16 @@
 #include "ptasm/cpu/MachineGrammar.h"
+#include "ptasm/cpu/Semantics.h"
 
 #include <antlr4-runtime.h>
 
+#include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "generated/ptasmMachineLexer.h"
@@ -104,6 +108,82 @@ PatternOperand operandOf(ptasmMachineParser::PatternOperandContext* context) {
     return operand;
 }
 
+size_t columnOf(antlr4::ParserRuleContext* context) {
+    return context->getStart()->getCharPositionInLine() + 1;
+}
+
+constexpr int kDecimalRadix = 10;
+constexpr int kHexRadix = 16;
+constexpr int kBinaryRadix = 2;
+
+std::optional<int64_t> numberOf(const std::string& text) {
+    int radix = kDecimalRadix;
+    std::string_view digits = text;
+    if (digits.starts_with("0x") || digits.starts_with("0X")) {
+        radix = kHexRadix;
+        digits.remove_prefix(2);
+    } else if (digits.starts_with("0b") || digits.starts_with("0B")) {
+        radix = kBinaryRadix;
+        digits.remove_prefix(2);
+    }
+    uint64_t value = 0;
+    for (char const digit : digits) {
+        int const place = std::isdigit(static_cast<unsigned char>(digit)) != 0 ? digit - '0'
+                                                                               : std::tolower(digit) - 'a' + kDecimalRadix;
+        if (value > (UINT64_MAX - static_cast<uint64_t>(place)) / static_cast<uint64_t>(radix)) {
+            return std::nullopt;
+        }
+        value = (value * static_cast<uint64_t>(radix)) + static_cast<uint64_t>(place);
+    }
+    return static_cast<int64_t>(value);
+}
+
+// Builds a call's node; a placeholder left unfilled is an error.
+// NOLINTBEGIN(misc-no-recursion): a call's arguments are calls.
+std::optional<SemNode> callOf(ptasmMachineParser::CallContext* context, std::string& error);
+
+std::optional<SemNode> valueOf(ptasmMachineParser::ValueContext* context, std::string& error) {
+    if (context->call() != nullptr) {
+        return callOf(context->call(), error);
+    }
+    if (context->placeholder() != nullptr) {
+        error = "at column " + std::to_string(columnOf(context)) + ": " + context->getText() + " has no semArgs value";
+        return std::nullopt;
+    }
+    SemNode node{.column = columnOf(context)};
+    if (context->NUMBER() != nullptr) {
+        std::optional<int64_t> const number = numberOf(context->NUMBER()->getText());
+        if (!number) {
+            error = "at column " + std::to_string(node.column) + ": " + context->getText() + " doesn't fit in 64 bits";
+            return std::nullopt;
+        }
+        node.kind = SemNode::Kind::number;
+        node.number = context->getStart()->getText() == "-" ? -*number : *number;
+        return node;
+    }
+    node.name = context->getText(); // a dotted name or $n
+    return node;
+}
+
+std::optional<SemNode> callOf(ptasmMachineParser::CallContext* context, std::string& error) {
+    SemNode node{.kind = SemNode::Kind::call, .column = columnOf(context)};
+    if (context->callee()->placeholder() != nullptr) {
+        error = "at column " + std::to_string(node.column) + ": " + context->callee()->getText() +
+                " has no semArgs value";
+        return std::nullopt;
+    }
+    node.name = context->callee()->getText();
+    for (ptasmMachineParser::ValueContext* value : context->value()) {
+        std::optional<SemNode> argument = valueOf(value, error);
+        if (!argument) {
+            return std::nullopt;
+        }
+        node.args.push_back(std::move(*argument));
+    }
+    return node;
+}
+// NOLINTEND(misc-no-recursion)
+
 std::string wordText(const PatternWord& word) {
     std::string text;
     for (const std::string& name : word.names) {
@@ -158,6 +238,24 @@ std::optional<std::string> canonicalPattern(std::string_view text, std::string& 
         return std::nullopt;
     }
     return patternText(*pattern);
+}
+
+std::optional<std::vector<SemNode>> parseSemantics(std::string_view text, std::string& error) {
+    Parse parse(text);
+    ptasmMachineParser::SemanticsContext* tree = parse.rules().semantics();
+    if (!parse.error().empty()) {
+        error = parse.error();
+        return std::nullopt;
+    }
+    std::vector<SemNode> statements;
+    for (ptasmMachineParser::StatementContext* statement : tree->statement()) {
+        std::optional<SemNode> call = callOf(statement->call(), error);
+        if (!call) {
+            return std::nullopt;
+        }
+        statements.push_back(std::move(*call));
+    }
+    return statements;
 }
 
 bool checkMachineString(MachineLanguage language, std::string_view text, std::string& error) {

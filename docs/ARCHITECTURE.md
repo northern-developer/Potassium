@@ -67,7 +67,9 @@ The types every stage shares, from source to output.
   variant -- `Instruction` (mnemonic, `Form`, operands), `Data` (slots),
   `Reserve` (zero bytes: `.SPACE`, `.ALIGN` padding), `Bytes` (as
   written: `.BYTE`, strings) --
-  under a shared address, size, bytes, line number and relocations.
+  under a shared address, size, bytes, line number and relocations. An
+  instruction expanded from a pseudo-instruction also records which, and
+  its part, k of n (`expansion`).
 - **`Operand`**: one written operand, in Intel order -- its `ArgType`,
   register number, expression terms, position (`op1` = 0), address part
   (`%hi`), and after pass 3 its value and relocation symbol.
@@ -87,8 +89,11 @@ The types every stage shares, from source to output.
 ## 4. Passes and their invariants
 
 1. **Parse and run statements.** Labels get addresses in their section;
-   each line gets its size from the form found now (an undefined name
-   counts as a local label while sizing). `.EQU`, `.ORG`, `.ALIGN` and
+   a pseudo-instruction is expanded into its real instructions, the
+   alternative chosen from what is known now (`becomes`), each its own
+   `Statement` on the line's number; each line gets its size from the
+   form found now (an undefined name counts as a local label while
+   sizing). `.EQU`, `.ORG`, `.ALIGN` and
    `.SPACE` evaluate their expressions here, so they can't refer forward.
 2. **Layout.** Named sections are placed after the absolute content, in
    order of first appearance, each aligned. Every label now has its
@@ -138,6 +143,21 @@ Invariants every change must keep:
 A grammar change, or a change to `Statement` or `Bom`, is a design
 change: it is written up (a Ticket) and agreed before code.
 
+**What each writer is to take from the machine file** (plan 0.2:E5.T1;
+the writers are 0.3-0.5's): they link `libptasm`, load the file with
+`loadCpuFile`, and read each form's `Encoding` (or `--dump-forms`).
+
+| Writer | Takes |
+|---|---|
+| LLVM MC: TableGen formats, asm parser, encoder, disassembler | `fields`, `formats`, each form's fixed values and operand parts; the register list and its names; `becomes` as `InstAlias` (one instruction) or an asm-parser pseudo; the relocations |
+| LLVM instruction selection | each form's semantics as DAG patterns (the operation names are LLVM's); the worked-out facts: `uses`/`defs` (implicit defs, flag clobbers), `flow` (`isBranch`, `isCall`, `isReturn`, `isIndirectBranch`), `loads`/`stores` (`mayLoad`, `mayStore`), `sideEffects`, `commutes`, `move`; operation legality from which operations some form is |
+| LLVM calling convention, frame lowering, clang's target info | the `abi` block: argument and return registers with their rules, struct return, callee-saved, the frame, the C types |
+| QEMU decoder (decodetree) | `fields`, `formats` and each form's fixed values |
+| QEMU TCG translator | each form's semantics, nearly one TCG op per micro-op; `delaySlot`; flags as TCG globals, one per flag; helpers by hand |
+| Renode (tlib, from QEMU's TCG) | the TCG translator's output, plus the board |
+| Debuggers (GDB servers, LLDB) | the register list (debugger numbers to come), the `abi` block's stack, frame and link registers, its `breakpoint` |
+| ptasm | encodings, `becomes`, each form's `target` |
+
 ## 7. Testing
 
 | Layer | What | Where |
@@ -146,6 +166,8 @@ change: it is written up (a Ticket) and agreed before code.
 | Golden | Each example's output in every format, byte for byte | `tests/golden/`, `test_examples.cpp` |
 | CLI | Exit codes, no output on error, AT&T twins equal to Intel | `ctest` scripted checks |
 | Real tools | Link with `ld`/`ld.lld` and run (QEMU for RV32I, OR1K); bytes against GCC's assembler | `tests/cmake/`, `tests/link/` |
+| Semantics | Programs run from a machine file's micro-ops, and the same under QEMU; each `abi` block against GCC | `tests/semantics/` (`ptsem.py`, `qemu_check.py`), `tests/abi/check-abi.py` |
+| Performance | The assembler's cost grows linearly with its source (release tier) | `tests/perf/scaling.py` |
 | Repo | Every cpu.json against the schema; each release's table against its plan files | `tests/check-cpu-json.py`, `scripts/update-tracker.py` |
 | Overlay | A private CPU's examples against its golden files, when `prototype/` is linked in | `tests/cmake/prototype_golden.cmake` |
 | Tiers | Standard on every change; release-level before a release | `scripts/verify.sh` (`--tidy`, `--release`) |

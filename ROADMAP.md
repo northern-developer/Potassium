@@ -45,6 +45,7 @@ for any CPU the machine file can describe.
 | `plan/0.3/README.md` | The emulators: QEMU and Renode. |
 | `plan/0.4/README.md` | The compiler: LLVM. |
 | `plan/0.5/README.md` | Board support: `ptbsp`. |
+| `plan/0.6/README.md` | The documentation and how-tos, before 1.0. |
 | `plan/wishlist.md` | Work not yet placed in any release. |
 | `docs/SPEC.md` | What ptasm does today. |
 | `docs/DESIGN.md`, `docs/ARCHITECTURE.md` | Why it is built that way. |

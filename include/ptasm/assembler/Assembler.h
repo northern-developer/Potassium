@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -75,11 +76,31 @@ private:
 	// A .ADDR slot's size: machine.description.addressBits, rounded up to a power of
 	// two bytes.
 	[[nodiscard]] int addressSlotBytes() const;
-	[[nodiscard]] std::vector<SourceStatement> parse(const std::string& sourceText) const;
+	// `forced`: parse in this syntax rather than the source's (a
+	// pseudo-instruction's expansion is always in Intel order).
+	[[nodiscard]] std::vector<SourceStatement> parse(const std::string& sourceText,
+	                                                 std::optional<Syntax> forced = std::nullopt) const;
 	[[nodiscard]] int64_t evaluate(const std::vector<Term>& terms, size_t line) const;
 
 	// Running the statement list, one kind each.
 	bool addStatement(Statement line);
+	// A pseudo-instruction's line: its form matched, an alternative chosen
+	// from what pass 1 knows, and its instructions added in its place.
+	bool expandPseudo(const Statement& line, const ptasm::Pseudo& pseudo);
+	// An operand's value, if pass 1 can compute it: numbers and .EQU
+	// constants defined so far.
+	[[nodiscard]] std::optional<int64_t> knownValue(const Operand& operand) const;
+	// The bits a "when"'s address part keeps of `value` (fitsu(%lo(v), 0)).
+	[[nodiscard]] std::optional<int64_t> partValue(const ptasm::Pseudo& pseudo,
+	                                               const ptasm::Pseudo::Alternative& tested, int64_t value,
+	                                               const std::vector<const Operand*>& byPosition) const;
+	[[nodiscard]] std::optional<Statement> partUse(const ptasm::Pseudo& pseudo,
+	                                               const ptasm::Pseudo::Alternative& tested,
+	                                               const std::vector<const Operand*>& byPosition) const;
+	// The first alternative whose "when" holds on what pass 1 knows, or
+	// the last, general one.
+	[[nodiscard]] const ptasm::Pseudo::Alternative* chooseAlternative(
+	    const ptasm::Pseudo& pseudo, const std::vector<const Operand*>& byPosition) const;
 	void run(const directive::Label& label);
 	void run(const directive::Org& org);
 	void run(const directive::Equ& equ);

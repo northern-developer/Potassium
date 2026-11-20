@@ -22,8 +22,9 @@ object for `tests/link/program.c`.
 
 ## 2. Machine
 
-32 registers, `R0`-`R31`. `R0` reads as zero; ptasm doesn't treat it
-specially. 32-bit addresses, little-endian, 32-bit instructions.
+32 registers, `R0`-`R31`. `R0` reads as zero (its register-list entry,
+`x0`, has `"const": 0`, which the semantics use); the assembler treats
+it like any register. 32-bit addresses, little-endian, 32-bit instructions.
 `relOffset` is `"before"`: a branch or jump offset counts from the
 instruction itself. Offsets are in half-words: the low bit isn't stored,
 and an odd distance is an error.
@@ -69,17 +70,22 @@ sign-extended. `%lo(...)` takes `imm`, `local` or `reloc`.
 r = 2, w = 1): GAS's `fence rw, io` is `FENCE 3, 12`. A bare `FENCE` is
 `fence iorw, iorw`.
 
-The pseudo-instructions GCC writes are also given as forms, each one
-RV32I instruction:
+The pseudo-instructions GCC writes are written as what they assemble
+to (`becomes`, SPEC §6.11):
 
 | ptasm | is |
 |---|---|
 | `NOP` | `ADDI R0, R0, 0` |
 | `MV rd, rs` | `ADDI rd, rs, 0` |
-| `LI rd, imm` (12 bits) | `ADDI rd, R0, imm` |
+| `LI rd, imm` | `ADDI rd, R0, imm` when it fits 12 bits; `LUI rd, %hi(imm)` alone when its low 12 bits are 0; else both, with `ADDI rd, rd, %lo(imm)`: as GNU as |
 | `J label` | `JAL R0, label` |
-| `JR rs` | `JALR R0, [rs + 0]` |
-| `RET` | `JALR R0, [R1 + 0]` |
+| `JR rs` | `JALR R0, rs, 0` |
+| `RET` | `JALR R0, R1, 0` |
+
+**Semantics** (SPEC §6.9): every instruction has them, mostly as mode
+set templates filled by `semArgs`; `LUI` has one per form. `ECALL` and
+`EBREAK` trap (`syscall`, `breakpoint`). The `abi` block (SPEC §6.10)
+is the ilp32 calling convention, `EBREAK` its breakpoint.
 
 GCC's `call` is `auipc` + `jalr` under one `R_RISCV_CALL_PLT`. The
 examples write `JAL R1, label` instead, which reaches +/-1 MiB.
@@ -99,8 +105,8 @@ examples write `JAL R1, label` instead, which reaches +/-1 MiB.
 
 ## 5. Known gaps
 
-- No `call`/`tail` (two instructions under one relocation), no `li`
-  beyond 12 bits, and no `la`.
+- No `call`/`tail` (two instructions under one relocation), and no
+  `la`.
 - No ABI register names, and no `%pcrel_hi`/`%pcrel_lo`, so no
   position-independent code.
 - `FENCE` takes numbers, not GAS's letters.
@@ -122,6 +128,11 @@ examples write `JAL R1, label` instead, which reaches +/-1 MiB.
 - Unit tests use `tests/fixtures/address-parts-cpu.json`, RV32I's
   `LUI`/`ADDI`/`SW`, for the address parts and whole-instruction
   relocations, in both syntaxes.
+- `ctest`'s `semantics-rv32i` and `semantics-qemu-rv32i`: the programs
+  in `tests/semantics/rv32i/` run from RV32I's micro-ops, and agree with
+  `qemu-system-riscv32`; `abi-rv32i`: the `abi` block against
+  `riscv64-unknown-elf-gcc`; `perf-scaling-rv32i` (release): the
+  assembler's cost grows linearly with the source.
 
 The link and instruction tests are registered only when the tools are
 found. `qemu-riscv32` is found through the `PTASM_QEMU_DIR` cache
